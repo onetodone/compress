@@ -5,16 +5,17 @@ Upload JPEG or PNG images and download smaller versions. A background worker com
 ## Stack
 
 - **Web:** Next.js (App Router, static export) and Tailwind CSS on Firebase Hosting
-- **API and worker:** NestJS on Google Cloud Run, one image with two entrypoints
+- **API and worker:** NestJS, one build with two entrypoints, run as two services on a Linux server
 - **Data and auth:** Firestore and Firebase Auth
 - **Storage and delivery:** Cloudflare R2 for files, Cloudinary for previews
-- **Background jobs:** Google Cloud Tasks
+- **Background jobs:** BullMQ on Redis
 
 ## Requirements
 
 - Node.js 24
 - pnpm 12 (version pinned in `package.json`)
 - Java 21 for the Firebase emulators (the Firebase CLI is a dev dependency)
+- Redis 7 or later on `127.0.0.1:6379` (job queue)
 
 ## Getting started
 
@@ -26,6 +27,8 @@ pnpm dev
 ```
 
 Open http://localhost:3000 and drop an image. The web app reads its `NEXT_PUBLIC_*` variables from the same root `.env`; with `NEXT_PUBLIC_USE_EMULATORS=true` it talks to the local emulators.
+
+The API enqueues compression jobs in Redis (`REDIS_URL`, database 4 by default) and the worker consumes them; a job is retried with exponential backoff up to `QUEUE_MAX_ATTEMPTS` times. Integration tests use database 15 (`TEST_REDIS_URL`) and flush it.
 
 Locally the API uses the Firebase Auth and Firestore emulators (UI on http://127.0.0.1:4000). Every route except `GET /health` requires a Firebase ID token in `Authorization: Bearer <token>`.
 
@@ -62,7 +65,7 @@ Uploads go to a real Cloudflare R2 bucket: fill in the `R2_*` variables in `.env
 docker compose up --build
 ```
 
-Compose also starts the Firebase Auth and Firestore emulators (ports 9099 and 8080), so the stack runs without a Google Cloud project, and serves the static export of the web app on http://localhost:3000. The API and the worker read the `R2_*` and `CLOUDINARY_*` variables from `.env`.
+Compose also starts Redis and the Firebase Auth and Firestore emulators (ports 9099 and 8080), so the stack runs without a Google Cloud project, and serves the static export of the web app on http://localhost:3000. The API and the worker read the `R2_*` and `CLOUDINARY_*` variables from `.env`.
 
 ## Repository layout
 
@@ -72,7 +75,7 @@ apps/
   api/        NestJS API and worker
 packages/
   shared/     zod schemas, job status and quota limits shared by web and api
-infra/        Firebase config, Firestore rules and indexes, R2 setup, deployment scripts
+infra/        Firebase config, Firestore rules and indexes, R2 setup
 ```
 
 ## License

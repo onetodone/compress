@@ -32,21 +32,25 @@ services:
       - '8080:8080'
     restart: unless-stopped
 
+  redis:
+    image: redis:8-alpine
+    restart: unless-stopped
+
   api:
     <<: *app
     environment:
       NODE_ENV: production
+      HOST: 0.0.0.0
       PORT: 8080
       GCP_PROJECT_ID: demo-image-compressor
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000}
       FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
       FIRESTORE_EMULATOR_HOST: emulators:8080
       METADATA_SERVER_DETECTION: none
-      TASKS_MODE: direct
-      WORKER_URL: http://worker:8080
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - emulators
-      - worker
+      - redis
     ports:
       - '3001:8080'
 
@@ -55,13 +59,15 @@ services:
     command: ['node', '--enable-source-maps', 'dist/main.worker.js']
     environment:
       NODE_ENV: production
+      HOST: 0.0.0.0
       PORT: 8080
       GCP_PROJECT_ID: demo-image-compressor
       FIRESTORE_EMULATOR_HOST: emulators:8080
       METADATA_SERVER_DETECTION: none
-      TASKS_MAX_ATTEMPTS: ${TASKS_MAX_ATTEMPTS:-5}
+      REDIS_URL: redis://redis:6379/0
     depends_on:
       - emulators
+      - redis
     ports:
       - '3002:8080'
 
