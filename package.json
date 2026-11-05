@@ -29,7 +29,7 @@
     "dev": "pnpm -r --parallel --if-present run dev",
     "build": "pnpm -r --if-present run build",
     "start": "pnpm --filter @onetodone/image-compressor-api start",
-    "emulators": "firebase emulators:start --config infra/firebase.json --project demo-image-compressor",
+    "emulators": "firebase emulators:start --config infra/firebase.json --project demo-image-compressor --only auth,firestore",
     "format": "prettier --write \"**/*.{ts,tsx,mjs}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,mjs}\"",
     "lint": "eslint . --fix",
