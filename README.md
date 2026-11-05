@@ -57,6 +57,20 @@ Uploads go to a real Cloudflare R2 bucket: fill in the `R2_*` variables in `.env
 | `pnpm test:unit` | Run unit tests only |
 | `pnpm test:integration` | Run integration tests against their own emulator instance (ports 9199 and 8180) |
 
+## Deployment
+
+- **API and worker:** built from the repository on a Linux server and run as two services (`node dist/main.api.js`, `node dist/main.worker.js`) behind a reverse proxy, with Redis on the same host. Every variable is described in `.env.example`; in production `firebase-admin` reads a service account key with `roles/datastore.user` through `GOOGLE_APPLICATION_CREDENTIALS`, and `METADATA_SERVER_DETECTION=none` skips the Google Cloud metadata lookup.
+- **Web app:** static export on Firebase Hosting (`infra/firebase.json`).
+- **Firestore:** `firebase deploy --only firestore:rules,firestore:indexes --config infra/firebase.json --project <project>`.
+- **R2:** production bucket with the CORS policy and lifecycle rules from [`infra/r2/README.md`](infra/r2/README.md).
+
+`.github/workflows/ci.yml` checks every push and pull request. After a green CI run on `main`, `.github/workflows/deploy.yml` deploys the API and the worker over SSH to a command bound to the deploy key, then builds the web app and deploys it to Hosting with Workload Identity Federation (no key). It reads from the GitHub environment `production`:
+
+| Kind | Name |
+|---|---|
+| Secrets | `DEPLOY_TARGET`, `DEPLOY_SSH_KEY`, `DEPLOY_KNOWN_HOSTS` |
+| Variables | `FIREBASE_PROJECT_ID`, `GCP_WORKLOAD_IDENTITY_PROVIDER`, `GCP_DEPLOY_SERVICE_ACCOUNT`, `NEXT_PUBLIC_API_URL`, `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`, `NEXT_PUBLIC_FIREBASE_APP_ID` |
+
 ## Docker
 
 `apps/api/Dockerfile` builds one image for both services. It starts the API by default; the worker runs with `node dist/main.worker.js`.
@@ -75,7 +89,8 @@ apps/
   api/        NestJS API and worker
 packages/
   shared/     zod schemas, job status and quota limits shared by web and api
-infra/        Firebase config, Firestore rules and indexes, R2 setup
+infra/        Firebase config (hosting, emulators), Firestore rules and indexes, R2 setup
+.github/      CI and deploy workflows
 ```
 
 ## License
