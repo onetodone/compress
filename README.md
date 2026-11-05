@@ -60,7 +60,7 @@ Uploads go to a real Cloudflare R2 bucket: fill in the `R2_*` variables in `.env
 ## Deployment
 
 - **API and worker:** built from the repository on a Linux server and run as two services (`node dist/main.api.js`, `node dist/main.worker.js`) behind a reverse proxy, with Redis on the same host. Every variable is described in `.env.example`; in production `firebase-admin` reads a service account key with `roles/datastore.user` through `GOOGLE_APPLICATION_CREDENTIALS`, and `METADATA_SERVER_DETECTION=none` skips the Google Cloud metadata lookup.
-- **Web app:** static export on Firebase Hosting (`infra/firebase.json`).
+- **Web app:** static export on Firebase Hosting (`infra/firebase.json`). Firebase serves only files inside the config's directory, so the export in `apps/web/out` is copied to `infra/hosting` before `firebase deploy --only hosting`.
 - **Firestore:** `firebase deploy --only firestore:rules,firestore:indexes --config infra/firebase.json --project <project>`.
 - **R2:** production bucket with the CORS policy and lifecycle rules from [`infra/r2/README.md`](infra/r2/README.md).
 

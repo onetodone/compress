@@ -72,6 +72,9 @@ jobs:
           NEXT_PUBLIC_FIREBASE_PROJECT_ID: ${{ vars.FIREBASE_PROJECT_ID }}
           NEXT_PUBLIC_FIREBASE_APP_ID: ${{ vars.NEXT_PUBLIC_FIREBASE_APP_ID }}
         run: pnpm --filter "@onetodone/image-compressor-web..." run build
+      # Firebase serves only files inside the directory of its config file.
+      - name: Stage the export for Hosting
+        run: rm -rf infra/hosting && cp -r apps/web/out infra/hosting
       - uses: google-github-actions/auth@v3
         with:
           workload_identity_provider: ${{ vars.GCP_WORKLOAD_IDENTITY_PROVIDER }}

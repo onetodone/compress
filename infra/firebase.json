@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "public": "../apps/web/out",
+    "public": "hosting",
     "cleanUrls": true,
     "trailingSlash": false,
     "headers": [
