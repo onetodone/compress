@@ -54,6 +54,7 @@ describe('QuotaService', () => {
     await expect(quota.get(user)).resolves.toMatchObject({ used: 5 })
   })
 
+  // Contended transactions retry with exponential backoff, which can outlast the default test timeout.
   it('never exceeds the limit under concurrent submits', async () => {
     const results = await Promise.allSettled(Array.from({ length: 8 }, () => consume()))
 
@@ -63,7 +64,7 @@ describe('QuotaService', () => {
     expect(fulfilled).toBeGreaterThan(0)
     expect(fulfilled).toBeLessThanOrEqual(5)
     await expect(quota.get(user)).resolves.toMatchObject({ used: fulfilled })
-  })
+  }, 30_000)
 
   it('resets the counter on the next UTC day', async () => {
     const yesterday = new Date(Date.now() - 24 * 60 * 60 * 1000)
