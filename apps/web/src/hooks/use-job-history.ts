@@ -1,7 +1,6 @@
 'use client'
 
 import type { JobSummary } from '@onetodone/image-compressor-shared'
-import type { User } from 'firebase/auth'
 import { useCallback, useEffect, useState } from 'react'
 
 import { api } from '@/lib/api'
@@ -24,10 +23,9 @@ function errorMessage(error: unknown): string {
 
 /**
  * Loads the user's jobs from `GET /jobs`, newest first, one page at a time.
- * @param user signed-in user, or `null` while signing in
+ * @param uid signed-in user
  */
-export function useJobHistory(user: User | null): JobHistory {
-  const uid = user?.uid ?? null
+export function useJobHistory(uid: string): JobHistory {
   const [state, setState] = useState<
     Omit<JobHistory, 'loadMore' | 'removeJob'> & { uid: string | null; cursor: string | null }
   >({
@@ -40,7 +38,6 @@ export function useJobHistory(user: User | null): JobHistory {
   })
 
   useEffect(() => {
-    if (!uid) return
     let cancelled = false
     api.listJobs(null).then(
       (page) => {

@@ -34,6 +34,27 @@ export async function signUpWithEmail(): Promise<{ token: string; uid: string }>
   return { token: idToken, uid: localId }
 }
 
+/**
+ * Links a user to a fake Google account in the Auth emulator, as `linkWithPopup` does in the browser,
+ * and returns the user's fresh ID token and uid.
+ * @param token current ID token of the user to link
+ */
+export async function linkWithGoogle(token: string): Promise<{ token: string; uid: string }> {
+  const url = `${emulatorUrl('FIREBASE_AUTH_EMULATOR_HOST')}/identitytoolkit.googleapis.com/v1/accounts:signInWithIdp?key=test`
+  const claims = { sub: crypto.randomUUID(), email: `${crypto.randomUUID()}@example.com`, email_verified: true }
+  const json = (await call(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      idToken: token,
+      requestUri: 'http://localhost',
+      postBody: `id_token=${encodeURIComponent(JSON.stringify(claims))}&providerId=google.com`,
+      returnSecureToken: true,
+    }),
+  })) as { idToken: string; localId: string }
+  return { token: json.idToken, uid: json.localId }
+}
+
 /** Deletes every document in the Firestore emulator. */
 export async function clearFirestore(): Promise<void> {
   const url = `${emulatorUrl('FIRESTORE_EMULATOR_HOST')}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`
