@@ -1,16 +1,13 @@
-/** Number of jobs a user may submit per UTC day. */
-export const DAILY_JOB_LIMITS = {
-  anonymous: 5,
-  signedIn: 30,
-} as const
+import { z } from 'zod'
 
 /**
- * Returns the daily job limit for a user.
- * @param isAnonymous whether the user signed in anonymously
+ * Codes in the body of a `429` response: `daily_limit` is the user's own daily quota,
+ * `network_daily_limit` the limit on anonymous jobs from one network.
  */
-export function dailyJobLimit(isAnonymous: boolean): number {
-  return isAnonymous ? DAILY_JOB_LIMITS.anonymous : DAILY_JOB_LIMITS.signedIn
-}
+export const quotaErrorCodeSchema = z.enum(['daily_limit', 'network_daily_limit'])
+
+/** Why a job was refused with `429`. */
+export type QuotaErrorCode = z.infer<typeof quotaErrorCodeSchema>
 
 /**
  * Returns the UTC calendar date of `date` as `YYYY-MM-DD`, the key that daily quotas reset on.

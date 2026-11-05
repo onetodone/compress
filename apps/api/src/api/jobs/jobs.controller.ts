@@ -1,4 +1,4 @@
-import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Param, Post, Query } from '@nestjs/common'
+import { Body, Controller, Delete, Get, HttpCode, HttpStatus, Ip, Param, Post, Query } from '@nestjs/common'
 import {
   type CreateJobRequest,
   createJobRequestSchema,
@@ -32,15 +32,20 @@ export class JobsController {
   @Post()
   create(
     @CurrentUser() user: AuthUser,
+    @Ip() ip: string | undefined,
     @Body(new ZodValidationPipe(createJobRequestSchema)) body: CreateJobRequest,
   ): Promise<CreateJobResponse> {
-    return this.jobs.create(user, body)
+    return this.jobs.create(user, ip, body)
   }
 
   @Post(':id/submit')
   @HttpCode(HttpStatus.OK)
-  submit(@CurrentUser() user: AuthUser, @Param('id') id: string): Promise<SubmitJobResponse> {
-    return this.jobs.submit(user, id)
+  submit(
+    @CurrentUser() user: AuthUser,
+    @Ip() ip: string | undefined,
+    @Param('id') id: string,
+  ): Promise<SubmitJobResponse> {
+    return this.jobs.submit(user, ip, id)
   }
 
   @Get(':id/download')

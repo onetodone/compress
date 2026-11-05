@@ -1,12 +1,4 @@
-import {
-  BadRequestException,
-  ConflictException,
-  HttpException,
-  HttpStatus,
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common'
+import { BadRequestException, ConflictException, Injectable, Logger, NotFoundException } from '@nestjs/common'
 import {
   type CreateJobRequest,
   type CreateJobResponse,
@@ -76,10 +68,10 @@ export class JobsService {
     return { jobs: page.map((doc) => toJobSummary(doc.id, doc.data())), nextCursor }
   }
 
-  async create(user: AuthUser, request: CreateJobRequest): Promise<CreateJobResponse> {
+  /** @param ip client address, for the per-network limit on anonymous jobs */
+  async create(user: AuthUser, ip: string | undefined, request: CreateJobRequest): Promise<CreateJobResponse> {
     // Quota is consumed on submit; checking it here only saves an upload that could never be submitted.
-    const quota = await this.quota.get(user)
-    if (quota.used >= quota.limit) throw new HttpException('Daily job limit reached', HttpStatus.TOO_MANY_REQUESTS)
+    await this.quota.assertAvailable(user, ip)
 
     const ref = this.firestore.collection(JOBS).doc()
     const inputKey = originalKey(user.uid, ref.id)
@@ -120,8 +112,10 @@ export class JobsService {
    * Confirms the upload, consumes quota and queues the job. Repeating the call is safe: a job that
    * is already queued is enqueued again without consuming more quota, which also recovers a job
    * whose first enqueue failed after the transaction committed.
+   *
+   * @param ip client address, for the per-network limit on anonymous jobs
    */
-  async submit(user: AuthUser, jobId: string): Promise<SubmitJobResponse> {
+  async submit(user: AuthUser, ip: string | undefined, jobId: string): Promise<SubmitJobResponse> {
     const ref = this.ref(jobId)
     const snapshot = await this.timer.measure('firestore', 'jobs.get', () => ref.get())
     if (!snapshot.exists || snapshot.get('ownerId') !== user.uid) throw new NotFoundException('Job not found')
@@ -132,20 +126,28 @@ export class JobsService {
         snapshot.get('inputKey') as string,
         snapshot.get('inputType') as string,
       )
-      status = await this.timer.measure('firestore', 'jobs.submit', () =>
-        this.firestore.runTransaction(async (tx) => {
-          const current = (await tx.get(ref)).get('status') as JobStatus
-          if (current !== 'awaiting_upload') return current
-          const { dayKey } = await this.quota.consume(tx, user)
-          tx.update(ref, {
-            status: 'queued',
-            inputBytes,
-            quotaDayKey: dayKey,
-            updatedAt: FieldValue.serverTimestamp(),
-          })
-          return 'queued'
-        }),
-      )
+      const reservation = await this.quota.reserveNetwork(user, ip)
+      let consumed = false
+      try {
+        ;({ status, consumed } = await this.timer.measure('firestore', 'jobs.submit', () =>
+          this.firestore.runTransaction(async (tx) => {
+            const current = (await tx.get(ref)).get('status') as JobStatus
+            if (current !== 'awaiting_upload') return { status: current, consumed: false }
+            const { dayKey } = await this.quota.consume(tx, user)
+            tx.update(ref, {
+              status: 'queued',
+              inputBytes,
+              quotaDayKey: dayKey,
+              updatedAt: FieldValue.serverTimestamp(),
+            })
+            return { status: 'queued' as const, consumed: true }
+          }),
+        ))
+      } finally {
+        // A submit that consumed nothing (refused, failed or already done by a concurrent call)
+        // gives the network its job back.
+        if (reservation && !consumed) await this.quota.releaseNetwork(reservation)
+      }
     }
 
     if (status === 'queued') await this.tasks.enqueueCompression(jobId)

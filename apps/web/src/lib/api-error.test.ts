@@ -9,6 +9,13 @@ describe('apiErrorMessage', () => {
     )
   })
 
+  it('suggests signing in when the network limit is reached', () => {
+    expect(
+      apiErrorMessage(429, { message: 'Daily job limit of this network reached', code: 'network_daily_limit' }),
+    ).toBe('Too many images from your network today. Sign in to continue.')
+    expect(apiErrorMessage(429, { code: 'daily_limit' })).toBe('Daily limit reached. Try again tomorrow.')
+  })
+
   it('shows the message of a client error', () => {
     expect(apiErrorMessage(409, { statusCode: 409, message: 'The file has not been uploaded' })).toBe(
       'The file has not been uploaded',

@@ -44,11 +44,19 @@ const queueConfigSchema = z.object({
   QUEUE_BACKOFF_MS: z.coerce.number().int().min(0).default(10_000),
 })
 
+const quotaConfigSchema = z.object({
+  QUOTA_ANONYMOUS_DAILY: z.coerce.number().int().min(1).default(5),
+  QUOTA_SIGNED_IN_DAILY: z.coerce.number().int().min(1).default(30),
+  // Bounds the free jobs a client gets by starting fresh anonymous sessions; 0 disables the limit.
+  QUOTA_ANONYMOUS_PER_IP_DAILY: z.coerce.number().int().min(0).default(20),
+})
+
 /** Environment variables of the public API. */
 export const apiConfigSchema = baseConfigSchema.extend({
   ...r2ConfigSchema.shape,
   ...cloudinaryConfigSchema.shape,
   ...queueConfigSchema.shape,
+  ...quotaConfigSchema.shape,
   CORS_ORIGINS: z
     .string()
     .transform((value) =>
@@ -76,6 +84,8 @@ export type R2Config = z.infer<typeof r2ConfigSchema>
 export type CloudinaryConfig = z.infer<typeof cloudinaryConfigSchema>
 /** Redis connection and job queue settings. */
 export type QueueConfig = z.infer<typeof queueConfigSchema>
+/** Daily job limits per user and per network. */
+export type QuotaConfig = z.infer<typeof quotaConfigSchema>
 /** Validated configuration of the API service. */
 export type ApiConfig = z.infer<typeof apiConfigSchema>
 /** Validated configuration of the worker service. */

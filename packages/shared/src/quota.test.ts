@@ -1,16 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { dailyJobLimit, jobsUsedToday, utcDayKey } from './quota.js'
-
-describe('dailyJobLimit', () => {
-  it('gives anonymous users the lower limit', () => {
-    expect(dailyJobLimit(true)).toBe(5)
-  })
-
-  it('gives signed-in users the higher limit', () => {
-    expect(dailyJobLimit(false)).toBe(30)
-  })
-})
+import { jobsUsedToday, utcDayKey } from './quota.js'
 
 describe('utcDayKey', () => {
   it('uses the UTC date regardless of the local offset', () => {

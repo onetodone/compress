@@ -69,6 +69,38 @@ describe('parseConfig', () => {
     expect(() => parseConfig(workerConfigSchema, { ...workerEnv, QUEUE_CONCURRENCY: '0' })).toThrow(/QUEUE_CONCURRENCY/)
   })
 
+  it('applies the default daily limits of the API', () => {
+    expect(parseConfig(apiConfigSchema, apiEnv)).toMatchObject({
+      QUOTA_ANONYMOUS_DAILY: 5,
+      QUOTA_SIGNED_IN_DAILY: 30,
+      QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
+    })
+  })
+
+  it('reads daily limits from the environment and lets 0 disable the network limit', () => {
+    const config = parseConfig(apiConfigSchema, {
+      ...apiEnv,
+      QUOTA_ANONYMOUS_DAILY: '3',
+      QUOTA_SIGNED_IN_DAILY: '100',
+      QUOTA_ANONYMOUS_PER_IP_DAILY: '0',
+    })
+
+    expect(config).toMatchObject({
+      QUOTA_ANONYMOUS_DAILY: 3,
+      QUOTA_SIGNED_IN_DAILY: 100,
+      QUOTA_ANONYMOUS_PER_IP_DAILY: 0,
+    })
+  })
+
+  it('rejects a user limit below one', () => {
+    expect(() => parseConfig(apiConfigSchema, { ...apiEnv, QUOTA_ANONYMOUS_DAILY: '0' })).toThrow(
+      /QUOTA_ANONYMOUS_DAILY/,
+    )
+    expect(() => parseConfig(apiConfigSchema, { ...apiEnv, QUOTA_SIGNED_IN_DAILY: '-1' })).toThrow(
+      /QUOTA_SIGNED_IN_DAILY/,
+    )
+  })
+
   it('splits CORS origins into a trimmed list', () => {
     expect(parseConfig(apiConfigSchema, apiEnv).CORS_ORIGINS).toEqual([
       'http://localhost:3000',

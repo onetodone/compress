@@ -6,7 +6,7 @@ const now = new Date('2026-10-22T08:00:00Z')
 
 describe('currentQuota', () => {
   it('reports the stored count on the same UTC day', () => {
-    expect(currentQuota({ dayKey: '2026-10-22', jobsToday: 2 }, true, now)).toEqual({
+    expect(currentQuota({ dayKey: '2026-10-22', jobsToday: 2 }, 5, now)).toEqual({
       dayKey: '2026-10-22',
       used: 2,
       limit: 5,
@@ -14,36 +14,36 @@ describe('currentQuota', () => {
   })
 
   it('starts from zero after the UTC day changes', () => {
-    expect(currentQuota({ dayKey: '2026-10-21', jobsToday: 5 }, true, now).used).toBe(0)
+    expect(currentQuota({ dayKey: '2026-10-21', jobsToday: 5 }, 5, now).used).toBe(0)
   })
 
   it('rolls over at UTC midnight, not local midnight', () => {
     const stored = { dayKey: '2026-10-21', jobsToday: 3 }
 
-    expect(currentQuota(stored, true, new Date('2026-10-21T23:59:59.999Z')).used).toBe(3)
-    expect(currentQuota(stored, true, new Date('2026-10-22T00:00:00.000Z')).used).toBe(0)
+    expect(currentQuota(stored, 5, new Date('2026-10-21T23:59:59.999Z')).used).toBe(3)
+    expect(currentQuota(stored, 5, new Date('2026-10-22T00:00:00.000Z')).used).toBe(0)
   })
 
-  it('uses the signed-in limit for non-anonymous users', () => {
-    expect(currentQuota(undefined, false, now)).toEqual({ dayKey: '2026-10-22', used: 0, limit: 30 })
+  it('reports the given limit', () => {
+    expect(currentQuota(undefined, 30, now)).toEqual({ dayKey: '2026-10-22', used: 0, limit: 30 })
   })
 })
 
 describe('consumeQuota', () => {
   it('counts the first job of a new user', () => {
-    expect(consumeQuota(undefined, true, now)).toEqual({ dayKey: '2026-10-22', used: 1, limit: 5 })
+    expect(consumeQuota(undefined, 5, now)).toEqual({ dayKey: '2026-10-22', used: 1, limit: 5 })
   })
 
   it('increments the count on the same day', () => {
-    expect(consumeQuota({ dayKey: '2026-10-22', jobsToday: 4 }, true, now)?.used).toBe(5)
+    expect(consumeQuota({ dayKey: '2026-10-22', jobsToday: 4 }, 5, now)?.used).toBe(5)
   })
 
   it('refuses a job once the daily limit is reached', () => {
-    expect(consumeQuota({ dayKey: '2026-10-22', jobsToday: 5 }, true, now)).toBeNull()
+    expect(consumeQuota({ dayKey: '2026-10-22', jobsToday: 5 }, 5, now)).toBeNull()
   })
 
   it('allows jobs again on the next UTC day after reaching the limit', () => {
-    expect(consumeQuota({ dayKey: '2026-10-21', jobsToday: 5 }, true, now)).toEqual({
+    expect(consumeQuota({ dayKey: '2026-10-21', jobsToday: 5 }, 5, now)).toEqual({
       dayKey: '2026-10-22',
       used: 1,
       limit: 5,
@@ -51,7 +51,7 @@ describe('consumeQuota', () => {
   })
 
   it('applies the higher limit after upgrading from an anonymous account', () => {
-    expect(consumeQuota({ dayKey: '2026-10-22', jobsToday: 5 }, false, now)?.used).toBe(6)
+    expect(consumeQuota({ dayKey: '2026-10-22', jobsToday: 5 }, 30, now)?.used).toBe(6)
   })
 })
 

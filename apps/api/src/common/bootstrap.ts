@@ -17,8 +17,9 @@ export async function createApp(module: DynamicModule): Promise<NestExpressAppli
 export function configureApp(app: NestExpressApplication): NestExpressApplication {
   app.useLogger(app.get(Logger))
   app.disable('x-powered-by')
-  // The reverse proxy in front of the API appends the client address as the last X-Forwarded-For entry.
-  app.set('trust proxy', 1)
+  // A reverse proxy on the same host appends the client address to X-Forwarded-For. Only loopback
+  // peers are trusted, so a client connecting directly cannot choose its address with the header.
+  app.set('trust proxy', 'loopback')
   app.enableShutdownHooks()
   return app
 }
