@@ -11,8 +11,7 @@ const apiEnv = {
   R2_BUCKET: 'bucket',
   CLOUDINARY_URL: 'cloudinary://123:secret@cloud',
   CLOUDINARY_FOLDER: 'image-compressor-test',
-  TASKS_MODE: 'direct',
-  WORKER_URL: 'http://localhost:3002',
+  REDIS_URL: 'redis://127.0.0.1:6379/4',
 }
 
 const workerEnv = {
@@ -23,34 +22,51 @@ const workerEnv = {
   R2_BUCKET: 'bucket',
   CLOUDINARY_URL: 'cloudinary://123:secret@cloud',
   CLOUDINARY_FOLDER: 'image-compressor-test',
-  TASKS_MAX_ATTEMPTS: '5',
+  REDIS_URL: 'redis://127.0.0.1:6379/4',
 }
 
 describe('parseConfig', () => {
   it('applies defaults for optional variables', () => {
     const config = parseConfig(workerConfigSchema, workerEnv)
 
-    expect(config).toMatchObject({ NODE_ENV: 'development', PORT: 8080, SLOW_CALL_THRESHOLD_MS: 1000 })
+    expect(config).toMatchObject({
+      NODE_ENV: 'development',
+      HOST: '0.0.0.0',
+      PORT: 8080,
+      SLOW_CALL_THRESHOLD_MS: 1000,
+      QUEUE_PREFIX: 'image-compressor',
+      QUEUE_MAX_ATTEMPTS: 5,
+      QUEUE_BACKOFF_MS: 10_000,
+      QUEUE_CONCURRENCY: 2,
+    })
   })
 
   it('coerces numeric variables', () => {
-    const config = parseConfig(workerConfigSchema, { ...workerEnv, PORT: '3002', SLOW_CALL_THRESHOLD_MS: '250' })
+    const config = parseConfig(workerConfigSchema, {
+      ...workerEnv,
+      PORT: '3002',
+      SLOW_CALL_THRESHOLD_MS: '250',
+      QUEUE_MAX_ATTEMPTS: '3',
+      QUEUE_CONCURRENCY: '4',
+    })
 
     expect(config.PORT).toBe(3002)
     expect(config.SLOW_CALL_THRESHOLD_MS).toBe(250)
-    expect(config.TASKS_MAX_ATTEMPTS).toBe(5)
+    expect(config.QUEUE_MAX_ATTEMPTS).toBe(3)
+    expect(config.QUEUE_CONCURRENCY).toBe(4)
   })
 
-  it('requires the R2 credentials and the attempt limit for the worker', () => {
+  it('requires the R2 credentials and Redis for the worker', () => {
     expect(() => parseConfig(workerConfigSchema, { GCP_PROJECT_ID: 'demo' })).toThrow(
-      /R2_ACCOUNT_ID[\s\S]*R2_BUCKET[\s\S]*TASKS_MAX_ATTEMPTS/,
+      /R2_ACCOUNT_ID[\s\S]*R2_BUCKET[\s\S]*REDIS_URL/,
     )
   })
 
-  it('rejects an attempt limit below one', () => {
-    expect(() => parseConfig(workerConfigSchema, { ...workerEnv, TASKS_MAX_ATTEMPTS: '0' })).toThrow(
-      /TASKS_MAX_ATTEMPTS/,
+  it('rejects an attempt limit or concurrency below one', () => {
+    expect(() => parseConfig(workerConfigSchema, { ...workerEnv, QUEUE_MAX_ATTEMPTS: '0' })).toThrow(
+      /QUEUE_MAX_ATTEMPTS/,
     )
+    expect(() => parseConfig(workerConfigSchema, { ...workerEnv, QUEUE_CONCURRENCY: '0' })).toThrow(/QUEUE_CONCURRENCY/)
   })
 
   it('splits CORS origins into a trimmed list', () => {
@@ -90,8 +106,11 @@ describe('parseConfig', () => {
     }
   })
 
-  it('rejects an unknown task delivery mode', () => {
-    expect(() => parseConfig(apiConfigSchema, { ...apiEnv, TASKS_MODE: 'pubsub' })).toThrow(/TASKS_MODE/)
+  it('requires a Redis URL and keeps its password out of the error', () => {
+    expect(() => parseConfig(apiConfigSchema, { ...apiEnv, REDIS_URL: undefined })).toThrow(/REDIS_URL/)
+    const parse = () => parseConfig(apiConfigSchema, { ...apiEnv, REDIS_URL: 'http://user:hidden-value@redis:6379' })
+    expect(parse).toThrow(/REDIS_URL/)
+    expect(parse).not.toThrow(/hidden-value/)
   })
 
   it('rejects an empty CORS origin list', () => {

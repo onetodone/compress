@@ -17,15 +17,14 @@ export async function createApp(module: DynamicModule): Promise<NestExpressAppli
 export function configureApp(app: NestExpressApplication): NestExpressApplication {
   app.useLogger(app.get(Logger))
   app.disable('x-powered-by')
-  // Cloud Run's front end appends the client address as the last X-Forwarded-For entry.
+  // The reverse proxy in front of the API appends the client address as the last X-Forwarded-For entry.
   app.set('trust proxy', 1)
-  // Cloud Run sends SIGTERM and allows about 10 seconds before killing the instance.
   app.enableShutdownHooks()
   return app
 }
 
-/** Starts listening on all interfaces, as Cloud Run requires. */
-export async function listen(app: NestExpressApplication, port: number): Promise<void> {
-  await app.listen(port, '0.0.0.0')
-  app.get(Logger).log(`Listening on port ${port}`, 'Bootstrap')
+/** Starts listening on the given address, e.g. `127.0.0.1` behind a reverse proxy or `0.0.0.0` in a container. */
+export async function listen(app: NestExpressApplication, host: string, port: number): Promise<void> {
+  await app.listen(port, host)
+  app.get(Logger).log(`Listening on ${host}:${port}`, 'Bootstrap')
 }

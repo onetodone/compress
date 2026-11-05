@@ -66,7 +66,6 @@ export function createLoggerParams(config: BaseConfig): Params {
       serializers: { req: () => undefined, res: () => undefined },
       customLogLevel: (_req, res, err) =>
         err || res.statusCode >= 500 ? 'error' : res.statusCode >= 400 ? 'warn' : 'info',
-      customProps: (req) => traceContext(req, config.GCP_PROJECT_ID),
       customSuccessMessage: (req, res) => `${req.method} ${requestPath(req)} ${res.statusCode}`,
       customErrorMessage: (req, res) => `${req.method} ${requestPath(req)} ${res.statusCode}`,
       customSuccessObject: (req, res, value: { responseTime: number }) => requestEntry(req, res, value.responseTime),
@@ -94,11 +93,4 @@ function requestEntry(req: LoggedRequest, res: ServerResponse, responseTime: num
     },
     userId: req.user?.uid,
   }
-}
-
-// Cloud Run sends `X-Cloud-Trace-Context: TRACE_ID/SPAN_ID;o=1`; this field groups log entries per request.
-function traceContext(req: IncomingMessage, projectId: string): Record<string, string> {
-  const header = req.headers['x-cloud-trace-context']
-  const traceId = typeof header === 'string' ? header.split('/')[0] : undefined
-  return traceId ? { 'logging.googleapis.com/trace': `projects/${projectId}/traces/${traceId}` } : {}
 }

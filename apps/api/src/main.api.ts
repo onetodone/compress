@@ -4,4 +4,4 @@ import { apiConfigSchema, parseConfig } from './common/config/config.js'
 
 const config = parseConfig(apiConfigSchema, process.env)
 const app = await createApiApp(config)
-await listen(app, config.PORT)
+await listen(app, config.HOST, config.PORT)

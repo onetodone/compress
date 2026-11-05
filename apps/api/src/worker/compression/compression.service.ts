@@ -1,10 +1,8 @@
-import { Inject, Injectable, Logger } from '@nestjs/common'
+import { Injectable, Logger } from '@nestjs/common'
 import { type JobStatus, TERMINAL_JOB_STATUSES, utcDayKey } from '@onetodone/image-compressor-shared'
 import { type DocumentSnapshot, FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore'
 
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
-import type { WorkerConfig } from '../../common/config/config.js'
-import { CONFIG } from '../../common/config/config.module.js'
 import { CallTimer } from '../../common/logging/call-timer.js'
 import { readStoredUsage, refundQuota } from '../../common/quota/quota.js'
 import { resultKey } from '../../common/r2/object-keys.js'
@@ -18,7 +16,7 @@ const USERS = 'users'
 const RETRIES_EXHAUSTED = 'The image could not be processed. Please try again later.'
 
 /**
- * Result of one task delivery: the job was finished (`done`, `failed`), or there was nothing to do
+ * Result of one task attempt: the job was finished (`done`, `failed`), or there was nothing to do
  * because the job does not exist or is already finished (`skipped`).
  */
 export type TaskOutcome = 'done' | 'failed' | 'skipped'
@@ -28,7 +26,7 @@ interface ClaimedJob {
   inputKey: string
 }
 
-/** Compresses queued jobs. Safe to run more than once for the same job, as Cloud Tasks may deliver a task twice. */
+/** Compresses queued jobs. Safe to run more than once for the same job, as the queue may deliver a task twice. */
 @Injectable()
 export class CompressionService {
   private readonly logger = new Logger(CompressionService.name)
@@ -38,16 +36,22 @@ export class CompressionService {
     private readonly storage: ObjectStorage,
     private readonly cdn: ImageCdn,
     private readonly timer: CallTimer,
-    @Inject(CONFIG) private readonly config: WorkerConfig,
   ) {}
 
   /**
-   * Processes one delivery of a compression task.
+   * Processes one attempt of a compression task.
    *
-   * @param attempt 1-based delivery attempt; the last one fails the job instead of asking for a retry
-   * @throws Error on a transient failure, so the task is delivered again
+   * @param attempt 1-based attempt; the last one fails the job instead of asking for a retry
+   * @param maxAttempts attempts the task gets in total. An attempt beyond it follows one that never
+   *   finished (the worker crashed or stalled), so the job is failed without trying again.
+   * @throws Error on a transient failure before the last attempt, so the task is retried
    */
-  async process(jobId: string, attempt: number): Promise<TaskOutcome> {
+  async process(jobId: string, attempt: number, maxAttempts: number): Promise<TaskOutcome> {
+    if (attempt > maxAttempts) {
+      this.logger.error({ jobId, attempt }, 'Compression did not finish within the attempt limit')
+      return this.fail(jobId, RETRIES_EXHAUSTED)
+    }
+
     const job = await this.claim(jobId)
     if (!job) return 'skipped'
 
@@ -55,7 +59,7 @@ export class CompressionService {
       return await this.compress(jobId, job)
     } catch (error) {
       if (error instanceof PermanentJobError) return this.fail(jobId, error.message)
-      if (attempt < this.config.TASKS_MAX_ATTEMPTS) throw error
+      if (attempt < maxAttempts) throw error
       this.logger.error({ jobId, attempt, err: error }, 'Compression failed on the last attempt')
       return this.fail(jobId, RETRIES_EXHAUSTED)
     }

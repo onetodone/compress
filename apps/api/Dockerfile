@@ -1,8 +1,8 @@
 # syntax=docker/dockerfile:1
 
-# One image serves both Cloud Run services:
-#   image-compressor-api     node dist/main.api.js (default command)
-#   image-compressor-worker  node dist/main.worker.js
+# One image serves both processes:
+#   API     node dist/main.api.js (default command)
+#   worker  node dist/main.worker.js
 
 FROM node:24-slim AS base
 RUN npm install -g corepack@latest && corepack enable
@@ -26,5 +26,5 @@ WORKDIR /app
 COPY --from=build /out ./
 USER node
 EXPOSE 8080
-# Started with node directly so SIGTERM from Cloud Run reaches the app.
+# Started with node directly so SIGTERM reaches the app.
 CMD ["node", "--enable-source-maps", "dist/main.api.js"]
