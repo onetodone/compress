@@ -18,6 +18,8 @@ export const meResponseSchema = z.object({
   uid: z.string(),
   isAnonymous: z.boolean(),
   quota: quotaSchema,
+  /** Whether the client's network has used up its daily anonymous jobs; always `false` for signed-in users. */
+  networkLimitReached: z.boolean(),
 })
 
 /** Response of `GET /me`: the signed-in user and their quota for today. */

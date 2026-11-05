@@ -28,7 +28,7 @@ export class ApiModule {
         TasksModule.register(config),
         AuthModule,
         HealthModule,
-        UsersModule,
+        UsersModule.register(config),
         JobsModule,
       ],
     }

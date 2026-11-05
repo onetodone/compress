@@ -6,6 +6,7 @@ import {
   type StoredObject,
   type UploadConstraints,
 } from '../../src/common/r2/object-storage.js'
+import { NetworkQuota } from '../../src/api/users/network-quota.js'
 import { TaskQueue } from '../../src/common/tasks/task-queue.js'
 
 /** An object held by {@link InMemoryObjectStorage}. */
@@ -110,5 +111,28 @@ export class InMemoryImageCdn extends ImageCdn {
     this.unavailable.clear()
     this.beforeUpload = null
     this.disabled = false
+  }
+}
+
+/** {@link NetworkQuota} kept in memory, keyed by `{dayKey}:{network}`. */
+export class InMemoryNetworkQuota extends NetworkQuota {
+  readonly counters = new Map<string, number>()
+
+  used(network: string, dayKey: string): Promise<number> {
+    return Promise.resolve(this.counters.get(`${dayKey}:${network}`) ?? 0)
+  }
+
+  reserve(network: string, dayKey: string, limit: number): Promise<boolean> {
+    const key = `${dayKey}:${network}`
+    const used = this.counters.get(key) ?? 0
+    if (used >= limit) return Promise.resolve(false)
+    this.counters.set(key, used + 1)
+    return Promise.resolve(true)
+  }
+
+  release(network: string, dayKey: string): Promise<void> {
+    const key = `${dayKey}:${network}`
+    this.counters.set(key, Math.max((this.counters.get(key) ?? 0) - 1, 0))
+    return Promise.resolve()
   }
 }

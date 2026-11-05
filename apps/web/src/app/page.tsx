@@ -42,26 +42,30 @@ export default function HomePage() {
 }
 
 function Workspace({ user }: { user: SessionUser }) {
-  const quota = useQuota(user.uid, user.isAnonymous)
+  const { quota, networkLimitReached } = useQuota(user.uid, user.isAnonymous)
   const history = useJobHistory(user.uid)
   const { uploads, addFiles, removeUpload } = useUploads()
 
   const sessionJobIds = new Set(uploads.map((upload) => upload.jobId))
   const earlierJobs = history.jobs.filter((job) => !sessionJobIds.has(job.id))
-  const limitReached = quota !== null && quota.used >= quota.limit
-  const limitHint = user.isAnonymous
-    ? 'Daily limit reached. Sign in for more, or try again tomorrow.'
-    : 'Daily limit reached. Try again tomorrow.'
+  const limitHint =
+    quota !== null && quota.used >= quota.limit
+      ? user.isAnonymous
+        ? 'Daily limit reached. Sign in for more, or try again tomorrow.'
+        : 'Daily limit reached. Try again tomorrow.'
+      : networkLimitReached
+        ? 'Too many images from your network today. Sign in to continue.'
+        : null
 
   return (
     <>
       <section aria-label="Upload" className="flex flex-col gap-3">
         {quota && (
           <div className="flex justify-end">
-            <QuotaMeter quota={quota} />
+            <QuotaMeter quota={quota} exhausted={networkLimitReached} />
           </div>
         )}
-        <DropZone disabled={limitReached} hint={limitReached ? limitHint : null} onFiles={addFiles} />
+        <DropZone disabled={limitHint !== null} hint={limitHint} onFiles={addFiles} />
       </section>
 
       {uploads.length > 0 && (

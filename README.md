@@ -38,7 +38,7 @@ Uploads go to a real Cloudflare R2 bucket: fill in the `R2_*` variables in `.env
 
 1. `POST /jobs` with `{ "originalName", "contentType", "size" }` returns `jobId` and a presigned `uploadUrl`, valid for 10 minutes.
 2. `PUT` the file to `uploadUrl` with the same `Content-Type`. R2 rejects a body whose type or size differs from the declared one.
-3. `POST /jobs/:id/submit` checks the upload, counts the job against the daily quota and queues it for compression.
+3. `POST /jobs/:id/submit` checks the upload, counts the job against the daily quota and queues it for compression. Daily limits come from `QUOTA_*` variables; anonymous jobs are also limited per client network (IPv4 address or IPv6 /64), so new anonymous sessions do not add free jobs without bound. The API takes the client address from `X-Forwarded-For` only when the request comes from a proxy on the same host.
 4. The browser follows `jobs/{jobId}` in Firestore until the job is `done` or `failed`. `GET /jobs?limit=&cursor=` lists the user's jobs, newest first.
 5. `GET /jobs/:id/download` returns a presigned URL, valid for 5 minutes, that saves the compressed file under the original name (`?disposition=inline` lets the browser display it instead). `DELETE /jobs/:id` removes the job, its files in R2 and its Cloudinary preview, if any.
 
@@ -89,7 +89,7 @@ apps/
   web/        Next.js app
   api/        NestJS API and worker
 packages/
-  shared/     zod schemas, job status and quota limits shared by web and api
+  shared/     zod schemas, job status and quota helpers shared by web and api
 infra/        Firebase config (hosting, emulators), Firestore rules and indexes, R2 setup
 .github/      CI and deploy workflows
 ```

@@ -53,4 +53,7 @@ export const apiConfig: ApiConfig = {
   ...cloudinaryConfig,
   ...queueConfig,
   CORS_ORIGINS: ['http://localhost:3000'],
+  QUOTA_ANONYMOUS_DAILY: 5,
+  QUOTA_SIGNED_IN_DAILY: 30,
+  QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
 }

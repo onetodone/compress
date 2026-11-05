@@ -44,6 +44,7 @@ describe('GET /me', () => {
       uid,
       isAnonymous: true,
       quota: { dayKey: expect.any(String), used: 0, limit: 5 },
+      networkLimitReached: false,
     })
   })
 

@@ -1,23 +1,31 @@
 'use client'
 
-import { jobsUsedToday, type Quota, utcDayKey } from '@onetodone/image-compressor-shared'
+import { jobsUsedToday, type MeResponse, type Quota, utcDayKey } from '@onetodone/image-compressor-shared'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 
 import { api } from '@/lib/api'
 import { getFirebase } from '@/lib/firebase'
 
+/** The user's quota for today and whether their network may still submit anonymous jobs. */
+export interface QuotaState {
+  /** `null` until both the used count and the limit have arrived. */
+  quota: Quota | null
+  /** The client's network has used up its anonymous jobs for today. */
+  networkLimitReached: boolean
+}
+
 /**
  * Returns the user's quota for today. The used count is updated live from `users/{uid}`, so submits
- * and refunds show up without a reload; the limit comes from `GET /me`, which is the authority on
- * it, and is fetched again when the user stops being anonymous. `null` until both have arrived.
+ * and refunds show up without a reload; the limit and the network state come from `GET /me`, which
+ * is the authority on them, and are fetched again when the used count or the anonymous flag changes.
  *
  * @param uid signed-in user
- * @param isAnonymous whether the user is anonymous; a change refetches the limit
+ * @param isAnonymous whether the user is anonymous
  */
-export function useQuota(uid: string, isAnonymous: boolean): Quota | null {
+export function useQuota(uid: string, isAnonymous: boolean): QuotaState {
   const [used, setUsed] = useState<number | null>(null)
-  const [limit, setLimit] = useState<number | null>(null)
+  const [me, setMe] = useState<(Pick<MeResponse, 'networkLimitReached'> & { limit: number }) | null>(null)
 
   useEffect(() => {
     return onSnapshot(doc(getFirebase().firestore, 'users', uid), (snapshot) => {
@@ -33,18 +41,20 @@ export function useQuota(uid: string, isAnonymous: boolean): Quota | null {
   useEffect(() => {
     let cancelled = false
     api.me().then(
-      (me) => {
-        if (!cancelled) setLimit(me.quota.limit)
+      (response) => {
+        if (!cancelled) setMe({ limit: response.quota.limit, networkLimitReached: response.networkLimitReached })
       },
       () => {
-        // The meter keeps the last known limit; submits enforce the real one on the server.
+        // Keeps the last known state; submits enforce the real limits on the server.
       },
     )
     return () => {
       cancelled = true
     }
-  }, [uid, isAnonymous])
+  }, [uid, isAnonymous, used])
 
-  if (used === null || limit === null) return null
-  return { dayKey: utcDayKey(new Date()), used, limit }
+  return {
+    quota: used === null || me === null ? null : { dayKey: utcDayKey(new Date()), used, limit: me.limit },
+    networkLimitReached: me?.networkLimitReached ?? false,
+  }
 }

@@ -48,6 +48,8 @@ services:
       FIRESTORE_EMULATOR_HOST: emulators:8080
       METADATA_SERVER_DETECTION: none
       REDIS_URL: redis://redis:6379/0
+      # Published ports reach the API from Docker's gateway, so every client would share one address.
+      QUOTA_ANONYMOUS_PER_IP_DAILY: 0
     depends_on:
       - emulators
       - redis

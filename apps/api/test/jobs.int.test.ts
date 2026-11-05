@@ -15,8 +15,13 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createTestApiApp } from './support/app.js'
-import { clearFirestore, signInAnonymously } from './support/emulators.js'
-import type { InMemoryImageCdn, InMemoryObjectStorage, RecordingTaskQueue } from './support/fakes.js'
+import { clearFirestore, signInAnonymously, signUpWithEmail } from './support/emulators.js'
+import type {
+  InMemoryImageCdn,
+  InMemoryNetworkQuota,
+  InMemoryObjectStorage,
+  RecordingTaskQueue,
+} from './support/fakes.js'
 
 const photo = { originalName: 'photo.jpg', contentType: 'image/jpeg', size: 2048 }
 
@@ -25,11 +30,12 @@ describe('jobs', () => {
   let storage: InMemoryObjectStorage
   let cdn: InMemoryImageCdn
   let tasks: RecordingTaskQueue
+  let networks: InMemoryNetworkQuota
   let firestore: Firestore
   let user: { token: string; uid: string }
 
   beforeAll(async () => {
-    ;({ app, storage, cdn, tasks } = await createTestApiApp())
+    ;({ app, storage, cdn, tasks, networks } = await createTestApiApp())
     firestore = app.get(Firestore)
   })
 
@@ -42,6 +48,7 @@ describe('jobs', () => {
     storage.unavailable.clear()
     cdn.reset()
     tasks.enqueued.length = 0
+    networks.counters.clear()
     user = await signInAnonymously()
   })
 
@@ -135,7 +142,9 @@ describe('jobs', () => {
     it('refuses to create a job when the daily quota is used up', async () => {
       await useWholeQuota()
 
-      await http().post('/jobs').set(auth()).send(photo).expect(429)
+      const response = await http().post('/jobs').set(auth()).send(photo).expect(429)
+
+      expect(response.body).toMatchObject({ code: 'daily_limit' })
     })
   })
 
@@ -232,6 +241,93 @@ describe('jobs', () => {
     it('answers 404 for unknown and malformed job ids', async () => {
       await submit('a1B2c3D4e5F6g7H8i9J0').expect(404)
       await submit('not-a-job-id').expect(404)
+    })
+  })
+
+  describe('per-network limit on anonymous jobs', () => {
+    // The test client connects over loopback, a trusted proxy, so X-Forwarded-For sets the client address.
+    const clientIp = '203.0.113.7'
+    const networkKey = () => `${utcDayKey(new Date())}:${clientIp}`
+    const useWholeNetworkLimit = () => networks.counters.set(networkKey(), 20)
+
+    async function uploadedJob(token = user.token, uid = user.uid): Promise<string> {
+      const response = await http().post('/jobs').set(auth(token)).set('X-Forwarded-For', clientIp).send(photo)
+      expect(response.status).toBe(201)
+      const { jobId } = createJobResponseSchema.parse(response.body)
+      storage.upload(`originals/${uid}/${jobId}`)
+      return jobId
+    }
+
+    const submitFrom = (jobId: string, token = user.token) =>
+      http().post(`/jobs/${jobId}/submit`).set(auth(token)).set('X-Forwarded-For', clientIp)
+
+    it('counts submitted anonymous jobs per client address', async () => {
+      await submitFrom(await uploadedJob()).expect(200)
+      const other = await signInAnonymously()
+      await submitFrom(await uploadedJob(other.token, other.uid), other.token).expect(200)
+
+      expect(networks.counters.get(networkKey())).toBe(2)
+    })
+
+    it('refuses a fresh anonymous session from a network that used up its limit', async () => {
+      const jobId = await uploadedJob()
+      useWholeNetworkLimit()
+
+      const created = await http().post('/jobs').set(auth()).set('X-Forwarded-For', clientIp).send(photo).expect(429)
+      const submitted = await submitFrom(jobId).expect(429)
+
+      expect(created.body).toMatchObject({ code: 'network_daily_limit' })
+      expect(submitted.body).toMatchObject({ code: 'network_daily_limit' })
+      expect(await job(jobId)).toMatchObject({ status: 'awaiting_upload' })
+      expect(await jobsToday()).toBeUndefined()
+      expect(tasks.enqueued).toEqual([])
+    })
+
+    it('reports a used-up network in GET /me for anonymous users only', async () => {
+      const me = (token = user.token) => http().get('/me').set(auth(token)).set('X-Forwarded-For', clientIp).expect(200)
+      const signedIn = await signUpWithEmail()
+
+      expect((await me()).body).toMatchObject({ networkLimitReached: false })
+      useWholeNetworkLimit()
+      expect((await me()).body).toMatchObject({ networkLimitReached: true })
+      expect((await me(signedIn.token)).body).toMatchObject({ networkLimitReached: false })
+    })
+
+    it('does not limit other networks', async () => {
+      useWholeNetworkLimit()
+      const { jobId } = await createJob()
+      storage.upload(`originals/${user.uid}/${jobId}`)
+
+      await submit(jobId).expect(200)
+    })
+
+    it('does not limit signed-in users', async () => {
+      const signedIn = await signUpWithEmail()
+      useWholeNetworkLimit()
+      const jobId = await uploadedJob(signedIn.token, signedIn.uid)
+
+      await submitFrom(jobId, signedIn.token).expect(200)
+
+      expect(networks.counters.get(networkKey())).toBe(20)
+    })
+
+    it("gives the network its job back when the user's own quota refuses the submit", async () => {
+      const jobId = await uploadedJob()
+      await useWholeQuota()
+
+      const response = await submitFrom(jobId).expect(429)
+
+      expect(response.body).toMatchObject({ code: 'daily_limit' })
+      expect(networks.counters.get(networkKey())).toBe(0)
+    })
+
+    it('counts a job once when it is submitted again or concurrently', async () => {
+      const jobId = await uploadedJob()
+
+      await Promise.all(Array.from({ length: 3 }, () => submitFrom(jobId)))
+      await submitFrom(jobId).expect(200)
+
+      expect(networks.counters.get(networkKey())).toBe(1)
     })
   })
 
