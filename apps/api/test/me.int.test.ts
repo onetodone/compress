@@ -1,11 +1,13 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import { meResponseSchema } from '@onetodone/image-compressor-shared'
+import { Firestore } from 'firebase-admin/firestore'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createApiApp } from '../src/api/api.module.js'
 import { apiConfig } from './support/config.js'
-import { clearFirestore, signInAnonymously, signUpWithEmail } from './support/emulators.js'
+import { QuotaService } from '../src/api/users/quota.service.js'
+import { clearFirestore, linkWithGoogle, signInAnonymously, signUpWithEmail } from './support/emulators.js'
 
 describe('GET /me', () => {
   let app: NestExpressApplication
@@ -51,6 +53,24 @@ describe('GET /me', () => {
     const response = await request(app.getHttpServer()).get('/me').set('Authorization', `Bearer ${token}`).expect(200)
 
     expect(response.body).toMatchObject({ uid, isAnonymous: false, quota: { used: 0, limit: 30 } })
+  })
+
+  it('keeps the uid and used quota and raises the limit when an anonymous user links Google', async () => {
+    const anonymous = await signInAnonymously()
+    const firestore = app.get(Firestore)
+    const quota = app.get(QuotaService)
+    for (let i = 0; i < 5; i++) {
+      await firestore.runTransaction((tx) => quota.consume(tx, { uid: anonymous.uid, isAnonymous: true }))
+    }
+
+    const linked = await linkWithGoogle(anonymous.token)
+
+    expect(linked.uid).toBe(anonymous.uid)
+    const response = await request(app.getHttpServer())
+      .get('/me')
+      .set('Authorization', `Bearer ${linked.token}`)
+      .expect(200)
+    expect(response.body).toMatchObject({ uid: anonymous.uid, isAnonymous: false, quota: { used: 5, limit: 30 } })
   })
 
   it('keeps health checks public', async () => {

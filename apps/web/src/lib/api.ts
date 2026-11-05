@@ -7,6 +7,8 @@ import {
   downloadJobResponseSchema,
   type ListJobsResponse,
   listJobsResponseSchema,
+  type MeResponse,
+  meResponseSchema,
   type SubmitJobResponse,
   submitJobResponseSchema,
 } from '@onetodone/image-compressor-shared'
@@ -39,6 +41,11 @@ async function request<S extends z.ZodType>(path: string, schema: S, init: Reque
 
 /** Calls of the public HTTP API, authenticated with the current user's Firebase ID token. */
 export const api = {
+  /** Returns the current user and today's quota as the API sees them. */
+  me(): Promise<MeResponse> {
+    return request('/me', meResponseSchema)
+  },
+
   /** Creates a job and returns a presigned URL for uploading its file. */
   createJob(body: CreateJobRequest): Promise<CreateJobResponse> {
     return request('/jobs', createJobResponseSchema, { method: 'POST', body: JSON.stringify(body) })
