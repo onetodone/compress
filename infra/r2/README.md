@@ -5,10 +5,11 @@ Originals and results are stored in R2 and accessed through the S3 API. Buckets 
 | Environment | Bucket |
 |---|---|
 | Development | `image-compressor-dev` |
+| Production | a bucket of its own, with its own token |
 
 ## Bucket
 
-- Location: automatic with the location hint *Western Europe*, close to the Cloud Run region `europe-west3`. No jurisdiction: it would change the endpoint host to `*.eu.r2.cloudflarestorage.com`.
+- Location: automatic with the location hint *Western Europe*, close to the API and to Firestore (`europe-west3`). No jurisdiction: it would change the endpoint host to `*.eu.r2.cloudflarestorage.com`.
 - Storage class: Standard.
 - Public access: disabled.
 
@@ -16,7 +17,7 @@ Originals and results are stored in R2 and accessed through the S3 API. Buckets 
 
 R2 → *Manage API tokens* → *Create Account API token*:
 
-- Permissions: **Object Read & Write**, applied to the bucket only.
+- Permissions: **Object Read & Write**, applied to the bucket only. One token per bucket, so the development token cannot touch production files.
 - Put the Access Key ID and Secret Access Key into `R2_ACCESS_KEY_ID` and `R2_SECRET_ACCESS_KEY`, and the account ID from the R2 overview into `R2_ACCOUNT_ID`.
 
 ## CORS
@@ -26,6 +27,7 @@ Browsers upload originals with a presigned `PUT` and download results with a pre
 Bucket → *Settings* → *CORS Policy* → *Add CORS policy*, then paste the policy for the environment:
 
 - Development: [`cors.dev.json`](cors.dev.json) (`http://localhost:3000`).
+- Production: the same policy with the production web origins (the Hosting domains) in `AllowedOrigins`.
 
 ## Lifecycle rules
 
