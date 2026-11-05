@@ -12,5 +12,6 @@ catalog:
 allowBuilds:
   '@firebase/util': false
   protobufjs: false
+  msgpackr-extract: false
   re2: false
   unrs-resolver: false

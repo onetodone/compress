@@ -14,12 +14,12 @@ export const FIREBASE_APP = Symbol('FIREBASE_APP')
 function createFirebaseApp(config: BaseConfig): App {
   const { FIREBASE_AUTH_EMULATOR_HOST: auth, FIRESTORE_EMULATOR_HOST: firestore } = process.env
   if (auth || firestore) {
-    // The Auth emulator accepts unsigned tokens, so this must never happen on Cloud Run.
+    // The Auth emulator accepts unsigned tokens, so this must never happen in production.
     const level = config.NODE_ENV === 'production' ? 'warn' : 'log'
     new Logger('Firebase')[level](`Using emulators: auth ${auth ?? 'off'}, firestore ${firestore ?? 'off'}`)
   }
-  // Without explicit credentials the SDK uses Application Default Credentials (the Cloud Run
-  // service identity), or no credentials at all when the emulator variables are set.
+  // Without explicit credentials the SDK uses Application Default Credentials (in production the
+  // service account key named by GOOGLE_APPLICATION_CREDENTIALS), or none with the emulators.
   // A unique name keeps several Nest applications in one process (tests) independent.
   return initializeApp({ projectId: config.GCP_PROJECT_ID }, `app-${randomUUID()}`)
 }

@@ -1,30 +1,34 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import { utcDayKey } from '@onetodone/image-compressor-shared'
+import { UnrecoverableError } from 'bullmq'
 import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore'
 import sharp from 'sharp'
-import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
+import { CompressionConsumer } from '../src/worker/compression/compression.consumer.js'
 import { createTestWorkerApp } from './support/app.js'
-import { workerConfig } from './support/config.js'
 import { clearFirestore } from './support/emulators.js'
 import type { InMemoryImageCdn, InMemoryObjectStorage } from './support/fakes.js'
 import { fixture } from './support/fixtures.js'
+import { flushTestRedis } from './support/redis.js'
 
 const UID = 'user-1'
 const JOB_ID = 'a1B2c3D4e5F6g7H8i9J0'
 const INPUT_KEY = `originals/${UID}/${JOB_ID}`
-const LAST_RETRY = String(workerConfig.TASKS_MAX_ATTEMPTS - 1)
+const MAX_ATTEMPTS = 3
 
-describe('POST /tasks/compress', () => {
+describe('compression task', () => {
   let app: NestExpressApplication
+  let consumer: CompressionConsumer
   let storage: InMemoryObjectStorage
   let cdn: InMemoryImageCdn
   let firestore: Firestore
   const today = utcDayKey(new Date())
 
   beforeAll(async () => {
+    await flushTestRedis()
     ;({ app, storage, cdn } = await createTestWorkerApp())
+    consumer = app.get(CompressionConsumer)
     firestore = app.get(Firestore)
   })
 
@@ -37,10 +41,8 @@ describe('POST /tasks/compress', () => {
     cdn.reset()
   })
 
-  const deliver = (body: object = { jobId: JOB_ID }, retryCount?: string) => {
-    const call = request(app.getHttpServer()).post('/tasks/compress').send(body)
-    return retryCount === undefined ? call : call.set('X-CloudTasks-TaskRetryCount', retryCount)
-  }
+  const deliver = (data: object = { jobId: JOB_ID }, attempt = 1) =>
+    consumer.handle({ data, attempt, maxAttempts: MAX_ATTEMPTS })
   const job = async () => (await firestore.doc(`jobs/${JOB_ID}`).get()).data()
   const jobsToday = async () => (await firestore.doc(`users/${UID}`).get()).get('jobsToday') as number
 
@@ -75,7 +77,7 @@ describe('POST /tasks/compress', () => {
     const original = fixture('photo.jpg')
     await queueJob(original)
 
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'done' })
+    expect(await deliver()).toBe('done')
 
     const outputKey = `results/${UID}/${JOB_ID}.jpg`
     const result = storage.objects.get(outputKey)
@@ -101,7 +103,7 @@ describe('POST /tasks/compress', () => {
   it('stores the type detected from the content, not the declared one', async () => {
     await queueJob(fixture('graphic.png'))
 
-    await deliver().expect(200)
+    await deliver()
 
     expect(await job()).toMatchObject({
       status: 'done',
@@ -114,7 +116,7 @@ describe('POST /tasks/compress', () => {
   it('takes over a job left in processing by a crashed attempt', async () => {
     await queueJob(fixture('photo.jpg'), { status: 'processing', attempts: 1 })
 
-    await deliver({ jobId: JOB_ID }, '1').expect(200, { jobId: JOB_ID, outcome: 'done' })
+    expect(await deliver({ jobId: JOB_ID }, 2)).toBe('done')
 
     expect(await job()).toMatchObject({ status: 'done', attempts: 2 })
   })
@@ -123,7 +125,7 @@ describe('POST /tasks/compress', () => {
     for (const status of ['done', 'failed']) {
       await queueJob(fixture('photo.jpg'), { status })
 
-      await deliver().expect(200, { jobId: JOB_ID, outcome: 'skipped' })
+      expect(await deliver()).toBe('skipped')
 
       expect(await job()).toMatchObject({ status, attempts: 0 })
       expect(storage.objects.size).toBe(1)
@@ -131,20 +133,20 @@ describe('POST /tasks/compress', () => {
   })
 
   it('ignores jobs that do not exist or were never submitted', async () => {
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'skipped' })
+    expect(await deliver()).toBe('skipped')
 
     await queueJob(fixture('photo.jpg'), { status: 'awaiting_upload' })
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'skipped' })
+    expect(await deliver()).toBe('skipped')
     expect(await job()).toMatchObject({ status: 'awaiting_upload' })
   })
 
   it('finishes a job once when the same task is delivered concurrently', async () => {
     await queueJob(fixture('photo.jpg'))
 
-    const responses = await Promise.all([deliver(), deliver(), deliver()])
+    const outcomes = await Promise.all([deliver(), deliver(), deliver()])
 
-    expect(responses.map((response) => response.status)).toEqual([200, 200, 200])
-    expect(responses.filter((response) => response.body.outcome === 'done').length).toBeGreaterThanOrEqual(1)
+    expect(outcomes.every((outcome) => outcome === 'done' || outcome === 'skipped')).toBe(true)
+    expect(outcomes).toContain('done')
     expect(await job()).toMatchObject({ status: 'done' })
     expect(await jobsToday()).toBe(2)
   })
@@ -152,8 +154,8 @@ describe('POST /tasks/compress', () => {
   it('fails a corrupt image permanently and refunds the quota exactly once', async () => {
     await queueJob(fixture('corrupt.jpg'))
 
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'failed' })
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'skipped' })
+    expect(await deliver()).toBe('failed')
+    expect(await deliver()).toBe('skipped')
 
     expect(await job()).toMatchObject({
       status: 'failed',
@@ -169,7 +171,7 @@ describe('POST /tasks/compress', () => {
     await queueJob(fixture('photo.jpg'))
     storage.objects.clear()
 
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'failed' })
+    expect(await deliver()).toBe('failed')
 
     expect(await job()).toMatchObject({ status: 'failed', error: 'The uploaded file is no longer available' })
   })
@@ -177,7 +179,7 @@ describe('POST /tasks/compress', () => {
   it('does not refund a job whose quota was counted on an earlier day', async () => {
     await queueJob(fixture('corrupt.jpg'), { quotaDayKey: '2000-01-01' })
 
-    await deliver().expect(200)
+    await deliver()
 
     expect(await job()).toMatchObject({ status: 'failed', quotaRefunded: false })
     expect(await jobsToday()).toBe(2)
@@ -187,7 +189,7 @@ describe('POST /tasks/compress', () => {
     await queueJob(fixture('corrupt.jpg'))
     await firestore.doc(`jobs/${JOB_ID}`).update({ quotaDayKey: FieldValue.delete() })
 
-    await deliver().expect(200)
+    await deliver()
 
     expect(await job()).toMatchObject({ status: 'failed', quotaRefunded: true })
     expect(await jobsToday()).toBe(1)
@@ -197,21 +199,20 @@ describe('POST /tasks/compress', () => {
     await queueJob(fixture('photo.jpg'))
     storage.unavailable.add('put')
 
-    const response = await deliver().expect(503)
+    await expect(deliver()).rejects.toThrow('R2 is unavailable')
 
-    expect(JSON.stringify(response.body)).not.toContain('R2')
     expect(await job()).toMatchObject({ status: 'processing', attempts: 1, quotaRefunded: false })
     expect(await jobsToday()).toBe(2)
 
     storage.unavailable.clear()
-    await deliver({ jobId: JOB_ID }, '1').expect(200, { jobId: JOB_ID, outcome: 'done' })
+    expect(await deliver({ jobId: JOB_ID }, 2)).toBe('done')
   })
 
   it('finishes without a preview when no CDN is configured', async () => {
     await queueJob(fixture('photo.jpg'))
     cdn.disabled = true
 
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'done' })
+    expect(await deliver()).toBe('done')
 
     expect(await job()).toMatchObject({ status: 'done', previewUrl: null, outputKey: `results/${UID}/${JOB_ID}.jpg` })
     expect(cdn.assets.size).toBe(0)
@@ -221,12 +222,12 @@ describe('POST /tasks/compress', () => {
     await queueJob(fixture('photo.jpg'))
     cdn.unavailable.add('upload')
 
-    await deliver().expect(503)
+    await expect(deliver()).rejects.toThrow('Cloudinary is unavailable')
 
     expect(await job()).toMatchObject({ status: 'processing', previewUrl: null })
 
     cdn.unavailable.clear()
-    await deliver({ jobId: JOB_ID }, '1').expect(200, { jobId: JOB_ID, outcome: 'done' })
+    expect(await deliver({ jobId: JOB_ID }, 2)).toBe('done')
     expect(await job()).toMatchObject({ status: 'done', previewUrl: expect.stringContaining(JOB_ID) })
     expect(cdn.assets.size).toBe(1)
   })
@@ -237,7 +238,7 @@ describe('POST /tasks/compress', () => {
       await firestore.doc(`jobs/${JOB_ID}`).delete()
     }
 
-    await deliver().expect(200, { jobId: JOB_ID, outcome: 'skipped' })
+    expect(await deliver()).toBe('skipped')
 
     expect(await job()).toBeUndefined()
     expect(storage.objects.has(`results/${UID}/${JOB_ID}.jpg`)).toBe(false)
@@ -245,22 +246,32 @@ describe('POST /tasks/compress', () => {
   })
 
   it('fails the job and refunds the quota when the last attempt hits a transient error', async () => {
-    await queueJob(fixture('photo.jpg'), { status: 'processing', attempts: workerConfig.TASKS_MAX_ATTEMPTS - 1 })
+    await queueJob(fixture('photo.jpg'), { status: 'processing', attempts: MAX_ATTEMPTS - 1 })
     storage.unavailable.add('get')
 
-    await deliver({ jobId: JOB_ID }, LAST_RETRY).expect(200, { jobId: JOB_ID, outcome: 'failed' })
+    expect(await deliver({ jobId: JOB_ID }, MAX_ATTEMPTS)).toBe('failed')
 
     expect(await job()).toMatchObject({
       status: 'failed',
       error: 'The image could not be processed. Please try again later.',
-      attempts: workerConfig.TASKS_MAX_ATTEMPTS,
+      attempts: MAX_ATTEMPTS,
       quotaRefunded: true,
     })
     expect(await jobsToday()).toBe(1)
   })
 
-  it('rejects a task without a valid job id', async () => {
-    await deliver({}).expect(400)
-    await deliver({ jobId: '../users/user-1' }).expect(400)
+  it('fails the job without compressing it when an earlier last attempt never finished', async () => {
+    await queueJob(fixture('photo.jpg'), { status: 'processing', attempts: MAX_ATTEMPTS })
+
+    expect(await deliver({ jobId: JOB_ID }, MAX_ATTEMPTS + 1)).toBe('failed')
+
+    expect(await job()).toMatchObject({ status: 'failed', attempts: MAX_ATTEMPTS, quotaRefunded: true })
+    expect(storage.objects.has(`results/${UID}/${JOB_ID}.jpg`)).toBe(false)
+    expect(await jobsToday()).toBe(1)
+  })
+
+  it('rejects a task without a valid job id so it is never retried', async () => {
+    await expect(deliver({})).rejects.toBeInstanceOf(UnrecoverableError)
+    await expect(deliver({ jobId: '../users/user-1' })).rejects.toBeInstanceOf(UnrecoverableError)
   })
 })

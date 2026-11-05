@@ -4,4 +4,4 @@ import { createWorkerApp } from './worker/worker.module.js'
 
 const config = parseConfig(workerConfigSchema, process.env)
 const app = await createWorkerApp(config)
-await listen(app, config.PORT)
+await listen(app, config.HOST, config.PORT)

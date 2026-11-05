@@ -1,8 +1,8 @@
 import { Module } from '@nestjs/common'
 
+import { CompressionConsumer } from './compression.consumer.js'
 import { CompressionService } from './compression.service.js'
-import { TasksController } from './tasks.controller.js'
 
-/** `POST /tasks/compress`: the handler Cloud Tasks delivers compression tasks to. */
-@Module({ controllers: [TasksController], providers: [CompressionService] })
+/** Consumes the compression queue. */
+@Module({ providers: [CompressionService, CompressionConsumer] })
 export class CompressionModule {}
