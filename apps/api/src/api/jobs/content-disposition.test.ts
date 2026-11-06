@@ -9,6 +9,12 @@ describe('downloadFileName', () => {
     expect(downloadFileName('scan.jpg', 'image/png')).toBe('scan.png')
   })
 
+  it('replaces any known image extension', () => {
+    expect(downloadFileName('sticker.WEBP', 'image/webp')).toBe('sticker.webp')
+    expect(downloadFileName('scan.jfif', 'image/jpeg')).toBe('scan.jpg')
+    expect(downloadFileName('render.avif', 'image/avif')).toBe('render.avif')
+  })
+
   it('appends the extension when the name has no image extension', () => {
     expect(downloadFileName('logo', 'image/png')).toBe('logo.png')
     expect(downloadFileName('report.v2', 'image/jpeg')).toBe('report.v2.jpg')

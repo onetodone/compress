@@ -5,8 +5,9 @@ import {
   DOWNLOAD_URL_TTL_SECONDS,
   type DownloadJobQuery,
   type DownloadJobResponse,
-  type InputType,
+  imageTypeSchema,
   type JobStatus,
+  type JobSummary,
   jobIdSchema,
   type ListJobsQuery,
   type ListJobsResponse,
@@ -65,7 +66,12 @@ export class JobsService {
       snapshot.docs.length > limit && last
         ? encodeJobCursor({ createdAt: last.get('createdAt') as Timestamp, id: last.id })
         : null
-    return { jobs: page.map((doc) => toJobSummary(doc.id, doc.data())), nextCursor }
+    const jobs = page.flatMap((doc) => {
+      const summary = toJobSummary(doc.id, doc.data())
+      if (!summary) this.logger.warn({ jobId: doc.id }, 'Left out a job document that cannot be read')
+      return summary ? [summary] : ([] as JobSummary[])
+    })
+    return { jobs, nextCursor }
   }
 
   /** @param ip client address, for the per-network limit on anonymous jobs */
@@ -89,6 +95,8 @@ export class JobsService {
         originalName: request.originalName,
         // The declared type; the worker replaces it with the type detected from the file.
         inputType: request.contentType,
+        outputType: null,
+        settings: request.settings,
         inputKey,
         inputBytes: null,
         outputKey: null,
@@ -161,7 +169,8 @@ export class JobsService {
     const outputKey = snapshot.get('outputKey') as string | null | undefined
     if (snapshot.get('status') !== 'done' || !outputKey) throw new ConflictException('The job is not finished')
 
-    const type = snapshot.get('inputType') as InputType
+    // A document without `outputType` has its result in the input type.
+    const type = imageTypeSchema.parse(snapshot.get('outputType') ?? snapshot.get('inputType'))
     const fileName = downloadFileName(snapshot.get('originalName') as string, type)
     const download = await this.storage.presignDownload(
       outputKey,

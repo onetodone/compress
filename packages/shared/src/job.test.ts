@@ -3,10 +3,14 @@ import { describe, expect, it } from 'vitest'
 import {
   createJobRequestSchema,
   inputTypeSchema,
+  isTerminalJobStatus,
   jobIdSchema,
   jobStatusSchema,
   listJobsQuerySchema,
+  listJobsResponseSchema,
   MAX_INPUT_BYTES,
+  readJobSettings,
+  submitJobResponseSchema,
   toJobSummary,
 } from './job.js'
 
@@ -22,23 +26,47 @@ describe('jobStatusSchema', () => {
   })
 })
 
+describe('isTerminalJobStatus', () => {
+  it('treats done and failed as final and anything else as running', () => {
+    expect(isTerminalJobStatus('done')).toBe(true)
+    expect(isTerminalJobStatus('failed')).toBe(true)
+    expect(isTerminalJobStatus('queued')).toBe(false)
+    expect(isTerminalJobStatus('unknown')).toBe(false)
+  })
+})
+
 describe('inputTypeSchema', () => {
-  it('accepts JPEG and PNG', () => {
-    expect(inputTypeSchema.parse('image/jpeg')).toBe('image/jpeg')
-    expect(inputTypeSchema.parse('image/png')).toBe('image/png')
+  it('accepts JPEG, PNG, WebP and AVIF', () => {
+    for (const type of ['image/jpeg', 'image/png', 'image/webp', 'image/avif']) {
+      expect(inputTypeSchema.parse(type)).toBe(type)
+    }
   })
 
   it('rejects other image types', () => {
-    expect(inputTypeSchema.safeParse('image/webp').success).toBe(false)
     expect(inputTypeSchema.safeParse('image/gif').success).toBe(false)
+    expect(inputTypeSchema.safeParse('image/heic').success).toBe(false)
+  })
+})
+
+describe('readJobSettings', () => {
+  it('reads stored settings', () => {
+    expect(readJobSettings({ preset: 'smaller' })).toEqual({ preset: 'smaller' })
+  })
+
+  it('reads missing or unknown settings as the defaults', () => {
+    expect(readJobSettings(undefined)).toEqual({ preset: 'balanced' })
+    expect(readJobSettings(null)).toEqual({ preset: 'balanced' })
+    expect(readJobSettings({ preset: 'tiny' })).toEqual({ preset: 'balanced' })
+    expect(readJobSettings('smaller')).toEqual({ preset: 'balanced' })
   })
 })
 
 describe('createJobRequestSchema', () => {
   const valid = { originalName: 'photo.jpg', contentType: 'image/jpeg', size: 1024 }
 
-  it('accepts a JPEG or PNG within the size limit', () => {
-    expect(createJobRequestSchema.parse(valid)).toEqual(valid)
+  it('accepts a supported image within the size limit with the default settings', () => {
+    expect(createJobRequestSchema.parse(valid)).toEqual({ ...valid, settings: { preset: 'balanced' } })
+    expect(createJobRequestSchema.parse({ ...valid, contentType: 'image/avif' }).contentType).toBe('image/avif')
     expect(createJobRequestSchema.parse({ ...valid, contentType: 'image/png', size: MAX_INPUT_BYTES }).size).toBe(
       MAX_INPUT_BYTES,
     )
@@ -53,8 +81,19 @@ describe('createJobRequestSchema', () => {
     expect(createJobRequestSchema.safeParse({ ...valid, size: 0 }).success).toBe(false)
   })
 
+  it('takes a compression preset and fills in the rest of the settings', () => {
+    expect(createJobRequestSchema.parse({ ...valid, settings: { preset: 'smaller' } }).settings).toEqual({
+      preset: 'smaller',
+    })
+    expect(createJobRequestSchema.parse({ ...valid, settings: {} }).settings).toEqual({ preset: 'balanced' })
+  })
+
+  it('rejects unknown presets', () => {
+    expect(createJobRequestSchema.safeParse({ ...valid, settings: { preset: 'tiny' } }).success).toBe(false)
+  })
+
   it('rejects unsupported content types', () => {
-    expect(createJobRequestSchema.safeParse({ ...valid, contentType: 'image/webp' }).success).toBe(false)
+    expect(createJobRequestSchema.safeParse({ ...valid, contentType: 'image/gif' }).success).toBe(false)
   })
 
   it('rejects file names with path separators or control characters', () => {
@@ -103,6 +142,7 @@ describe('toJobSummary', () => {
       status: 'done',
       originalName: 'photo.jpg',
       inputType: 'image/jpeg',
+      outputType: null,
       inputBytes: 2048,
       outputBytes: 512,
       width: 64,
@@ -122,7 +162,70 @@ describe('toJobSummary', () => {
       createdAt: timestamp('2026-10-21T10:00:00.000Z'),
     })
 
-    expect(summary).toMatchObject({ inputBytes: null, outputBytes: null, previewUrl: null, finishedAt: null })
+    expect(summary).toMatchObject({
+      outputType: null,
+      inputBytes: null,
+      outputBytes: null,
+      previewUrl: null,
+      finishedAt: null,
+    })
+  })
+
+  it('keeps types and statuses this version does not know, and drops unknown fields', () => {
+    const summary = toJobSummary(id, {
+      status: 'cancelled',
+      originalName: 'drawing.jxl',
+      inputType: 'image/jxl',
+      outputType: 'image/jxl',
+      createdAt: timestamp('2026-10-21T10:00:00.000Z'),
+      settings: { preset: 'tiny' },
+    })
+
+    expect(summary).toMatchObject({ status: 'unknown', inputType: 'image/jxl', outputType: 'image/jxl' })
+    expect(summary).not.toHaveProperty('settings')
+  })
+
+  it('returns null for a document that cannot be shown', () => {
+    expect(toJobSummary(id, { status: 'done', inputType: 'image/png' })).toBeNull()
+  })
+})
+
+describe('listJobsResponseSchema', () => {
+  const job = {
+    id: 'a1B2c3D4e5F6g7H8i9J0',
+    status: 'done',
+    originalName: 'photo.webp',
+    inputType: 'image/webp',
+    outputType: 'image/webp',
+    inputBytes: 2048,
+    outputBytes: 512,
+    width: 64,
+    height: 48,
+    previewUrl: null,
+    error: null,
+    createdAt: '2026-10-21T10:00:00.000Z',
+    finishedAt: '2026-10-21T10:00:05.000Z',
+  }
+
+  it('reads jobs with unknown statuses, types and fields', () => {
+    const page = listJobsResponseSchema.parse({
+      jobs: [{ ...job, status: 'archived', inputType: 'image/jxl', outputType: 'image/jxl', tags: ['a'] }],
+      nextCursor: null,
+    })
+
+    expect(page.jobs).toEqual([{ ...job, status: 'unknown', inputType: 'image/jxl', outputType: 'image/jxl' }])
+  })
+
+  it('leaves out a job it cannot read instead of failing the page', () => {
+    const page = listJobsResponseSchema.parse({ jobs: [{ id: 'broken' }, job], nextCursor: 'next' })
+
+    expect(page).toEqual({ jobs: [job], nextCursor: 'next' })
+  })
+})
+
+describe('submitJobResponseSchema', () => {
+  it('reads a status this version does not know as unknown', () => {
+    expect(submitJobResponseSchema.parse({ jobId: 'a1B2c3D4e5F6g7H8i9J0', status: 'scheduled' }).status).toBe('unknown')
   })
 })
 

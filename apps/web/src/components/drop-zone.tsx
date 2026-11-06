@@ -1,6 +1,9 @@
 'use client'
 
+import { imageFormats, MAX_INPUT_BYTES } from '@onetodone/image-compressor-shared'
 import { type DragEvent, useState } from 'react'
+
+import { formatBytes } from '@/lib/files'
 
 interface DropZoneProps {
   disabled: boolean
@@ -38,7 +41,7 @@ export function DropZone({ disabled, hint, onFiles }: DropZoneProps) {
     >
       <input
         type="file"
-        accept="image/jpeg,image/png"
+        accept={imageFormats.accept}
         multiple
         disabled={disabled}
         className="sr-only"
@@ -60,7 +63,9 @@ export function DropZone({ disabled, hint, onFiles }: DropZoneProps) {
       ) : (
         <>
           <span className="font-medium">Drop images here or click to choose</span>
-          <span className="text-sm text-zinc-500 dark:text-zinc-400">JPEG or PNG, up to 10 MB each</span>
+          <span className="text-sm text-zinc-500 dark:text-zinc-400">
+            {imageFormats.names('or')}, up to {formatBytes(MAX_INPUT_BYTES)} each
+          </span>
         </>
       )}
     </label>

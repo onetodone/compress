@@ -1,6 +1,6 @@
 'use client'
 
-import { type JobSummary, TERMINAL_JOB_STATUSES, toJobSummary } from '@onetodone/image-compressor-shared'
+import { isTerminalJobStatus, type JobSummary, toJobSummary } from '@onetodone/image-compressor-shared'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useEffect, useState } from 'react'
 
@@ -20,7 +20,7 @@ export interface LiveJob {
 export function useLiveJob(jobId: string | null, initial: JobSummary | null = null): LiveJob {
   const [job, setJob] = useState<JobSummary | null>(initial)
   const [error, setError] = useState<string | null>(null)
-  const finished = initial !== null && TERMINAL_JOB_STATUSES.includes(initial.status)
+  const finished = initial !== null && isTerminalJobStatus(initial.status)
 
   useEffect(() => {
     if (!jobId || finished) return
@@ -28,11 +28,11 @@ export function useLiveJob(jobId: string | null, initial: JobSummary | null = nu
       doc(getFirebase().firestore, 'jobs', jobId),
       (snapshot) => {
         const data = snapshot.data()
-        if (!data) return
-        const summary = toJobSummary(snapshot.id, data)
+        const summary = data ? toJobSummary(snapshot.id, data) : null
+        if (!summary) return
         setJob(summary)
         // A finished job never changes again, so there is nothing left to listen for.
-        if (TERMINAL_JOB_STATUSES.includes(summary.status)) unsubscribe()
+        if (isTerminalJobStatus(summary.status)) unsubscribe()
       },
       () => setError('Live updates stopped. Reload the page to refresh.'),
     )

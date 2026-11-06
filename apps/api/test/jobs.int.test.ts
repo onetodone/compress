@@ -10,7 +10,7 @@ import {
   UPLOAD_URL_TTL_SECONDS,
   utcDayKey,
 } from '@onetodone/image-compressor-shared'
-import { Firestore, Timestamp } from 'firebase-admin/firestore'
+import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
@@ -78,6 +78,7 @@ describe('jobs', () => {
       status: 'done',
       originalName: 'Схема (v2).jpg',
       inputType: 'image/png',
+      outputType: 'image/png',
       outputKey,
       outputBytes: 6,
       previewUrl: `https://cdn.test/${jobId}`,
@@ -108,6 +109,8 @@ describe('jobs', () => {
         status: 'awaiting_upload',
         originalName: 'photo.jpg',
         inputType: 'image/jpeg',
+        outputType: null,
+        settings: { preset: 'balanced' },
         inputKey,
         inputBytes: null,
         outputKey: null,
@@ -119,6 +122,17 @@ describe('jobs', () => {
       })
     })
 
+    it('stores the compression preset of the request', async () => {
+      const response = await http()
+        .post('/jobs')
+        .set(auth())
+        .send({ ...photo, contentType: 'image/avif', settings: { preset: 'smaller' } })
+        .expect(201)
+      const { jobId } = createJobResponseSchema.parse(response.body)
+
+      expect(await job(jobId)).toMatchObject({ inputType: 'image/avif', settings: { preset: 'smaller' } })
+    })
+
     it('does not consume quota', async () => {
       await createJob()
 
@@ -126,7 +140,8 @@ describe('jobs', () => {
     })
 
     it.each([
-      ['an unsupported type', { ...photo, contentType: 'image/webp' }],
+      ['an unsupported type', { ...photo, contentType: 'image/gif' }],
+      ['an unknown preset', { ...photo, settings: { preset: 'tiny' } }],
       ['a file over 10 MB', { ...photo, size: MAX_INPUT_BYTES + 1 }],
       ['a missing name', { contentType: 'image/png', size: 10 }],
       ['a name with a path', { ...photo, originalName: '../photo.jpg' }],
@@ -378,6 +393,7 @@ describe('jobs', () => {
         status: 'done',
         originalName: 'photo-2.jpg',
         inputType: 'image/jpeg',
+        outputType: null,
         inputBytes: 2048,
         outputBytes: 1024,
         width: 64,
@@ -388,6 +404,18 @@ describe('jobs', () => {
         finishedAt: '2026-10-21T10:00:02.500Z',
       })
       expect(response.body.jobs[0]).not.toHaveProperty('inputKey')
+    })
+
+    it('keeps jobs of unknown types and statuses and leaves out documents it cannot read', async () => {
+      const [id] = await seedJobs(1)
+      await firestore.doc(`jobs/${id}`).update({ status: 'archived', inputType: 'image/jxl', outputType: 'image/jxl' })
+      await firestore.collection('jobs').add({ ownerId: user.uid, status: 'done', createdAt: Timestamp.now() })
+
+      const page = listJobsResponseSchema.parse((await list().expect(200)).body)
+
+      expect(page.jobs).toEqual([
+        expect.objectContaining({ id, status: 'unknown', inputType: 'image/jxl', outputType: 'image/jxl' }),
+      ])
     })
 
     it('pages through all jobs with the cursor', async () => {
@@ -437,6 +465,35 @@ describe('jobs', () => {
       )
       expect(params.get('X-Amz-Expires')).toBe(String(DOWNLOAD_URL_TTL_SECONDS))
       expect(Date.parse(expiresAt)).toBeGreaterThanOrEqual(before + DOWNLOAD_URL_TTL_SECONDS * 1000)
+    })
+
+    it('names and types the download after the result type', async () => {
+      const { jobId } = await finishedJob({
+        originalName: 'sticker.WEBP',
+        inputType: 'image/webp',
+        outputType: 'image/webp',
+      })
+
+      const { url } = downloadJobResponseSchema.parse((await download(jobId).expect(200)).body)
+
+      const params = new URL(url).searchParams
+      expect(params.get('response-content-type')).toBe('image/webp')
+      expect(params.get('response-content-disposition')).toBe(
+        `attachment; filename="sticker.webp"; filename*=UTF-8''sticker.webp`,
+      )
+    })
+
+    it('falls back to the input type for jobs stored without a result type', async () => {
+      const { jobId } = await finishedJob({ originalName: 'photo.jpeg', inputType: 'image/jpeg' })
+      await firestore.doc(`jobs/${jobId}`).update({ outputType: FieldValue.delete() })
+
+      const { url } = downloadJobResponseSchema.parse((await download(jobId).expect(200)).body)
+
+      const params = new URL(url).searchParams
+      expect(params.get('response-content-type')).toBe('image/jpeg')
+      expect(params.get('response-content-disposition')).toBe(
+        `attachment; filename="photo.jpg"; filename*=UTF-8''photo.jpg`,
+      )
     })
 
     it('returns a URL the browser can display when asked for inline', async () => {

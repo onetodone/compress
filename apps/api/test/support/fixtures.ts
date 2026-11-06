@@ -1,6 +1,9 @@
 import { readFileSync } from 'node:fs'
 
-/** Reads an image from `test/fixtures`: `photo.jpg`, `graphic.png` or `corrupt.jpg`. */
-export function fixture(name: 'photo.jpg' | 'graphic.png' | 'corrupt.jpg'): Buffer {
+/** Image files in `test/fixtures`. */
+export type FixtureName = 'photo.jpg' | 'graphic.png' | 'photo.webp' | 'photo.avif' | 'corrupt.jpg'
+
+/** Reads an image from `test/fixtures`. */
+export function fixture(name: FixtureName): Buffer {
   return readFileSync(new URL(`../fixtures/${name}`, import.meta.url))
 }

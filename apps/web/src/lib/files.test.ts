@@ -4,19 +4,35 @@ import { describe, expect, it } from 'vitest'
 import { checkFile, formatBytes, savedPercent } from './files'
 
 describe('checkFile', () => {
-  it('accepts a JPEG or PNG within the size limit', () => {
+  it('accepts a supported image within the size limit', () => {
     expect(checkFile({ name: 'photo.jpg', type: 'image/jpeg', size: 2048 })).toEqual({
       ok: true,
-      request: { originalName: 'photo.jpg', contentType: 'image/jpeg', size: 2048 },
+      request: { originalName: 'photo.jpg', contentType: 'image/jpeg', size: 2048, settings: { preset: 'balanced' } },
     })
     expect(checkFile({ name: 'graphic.png', type: 'image/png', size: MAX_INPUT_BYTES }).ok).toBe(true)
+    expect(checkFile({ name: 'sticker.webp', type: 'image/webp', size: 10 }).ok).toBe(true)
+    expect(checkFile({ name: 'render.avif', type: 'image/avif', size: 10 }).ok).toBe(true)
+  })
+
+  it('creates the job with the chosen preset', () => {
+    const checked = checkFile({ name: 'photo.jpg', type: 'image/jpeg', size: 2048 }, 'smaller')
+
+    expect(checked.ok && checked.request.settings).toEqual({ preset: 'smaller' })
+  })
+
+  it('takes the type from the extension when the browser reports none', () => {
+    const checked = checkFile({ name: 'render.AVIF', type: '', size: 10 })
+
+    expect(checked.ok && checked.request.contentType).toBe('image/avif')
+    expect(checkFile({ name: 'notes.txt', type: '', size: 10 }).ok).toBe(false)
   })
 
   it('rejects other types, empty files and files over 10 MB', () => {
-    expect(checkFile({ name: 'a.webp', type: 'image/webp', size: 10 })).toEqual({
+    expect(checkFile({ name: 'a.gif', type: 'image/gif', size: 10 })).toEqual({
       ok: false,
-      reason: 'Only JPEG and PNG',
+      reason: 'Only JPEG, PNG, WebP and AVIF',
     })
+    expect(checkFile({ name: 'a.png', type: 'image/gif', size: 10 }).ok).toBe(false)
     expect(checkFile({ name: 'a.png', type: 'image/png', size: 0 })).toEqual({ ok: false, reason: 'The file is empty' })
     expect(checkFile({ name: 'a.png', type: 'image/png', size: MAX_INPUT_BYTES + 1 })).toEqual({
       ok: false,

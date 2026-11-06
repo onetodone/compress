@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { IMAGE_TYPES, type ImageType, imageTypeSchema } from './format.js'
+
 /** Lifecycle states of a compression job, in the order a successful job passes through them. */
 export const JOB_STATUSES = ['awaiting_upload', 'queued', 'processing', 'done', 'failed'] as const
 
@@ -12,14 +14,56 @@ export type JobStatus = z.infer<typeof jobStatusSchema>
 /** Statuses after which a job never changes again. */
 export const TERMINAL_JOB_STATUSES: readonly JobStatus[] = ['done', 'failed']
 
-/** Image MIME types accepted for compression. */
-export const INPUT_TYPES = ['image/jpeg', 'image/png'] as const
+/**
+ * Whether a job in this status never changes again. Accepts any string, so a status this version
+ * does not know counts as still running.
+ * @param status status as read from a job
+ */
+export function isTerminalJobStatus(status: string): boolean {
+  return (TERMINAL_JOB_STATUSES as readonly string[]).includes(status)
+}
+
+/** Image MIME types accepted for compression: every supported format. */
+export const INPUT_TYPES = IMAGE_TYPES
 
 /** Validates an accepted image MIME type. */
-export const inputTypeSchema = z.enum(INPUT_TYPES)
+export const inputTypeSchema = imageTypeSchema
 
 /** Image MIME type accepted for compression. */
-export type InputType = z.infer<typeof inputTypeSchema>
+export type InputType = ImageType
+
+/** Trade-offs between quality and size offered for compression. */
+export const COMPRESSION_PRESETS = ['balanced', 'smaller'] as const
+
+/** Validates a compression preset. */
+export const compressionPresetSchema = z.enum(COMPRESSION_PRESETS)
+
+/** Trade-off between quality and size: `balanced` keeps the look, `smaller` gives up some quality for size. */
+export type CompressionPreset = z.infer<typeof compressionPresetSchema>
+
+/** Preset used when a job does not name one. */
+export const DEFAULT_COMPRESSION_PRESET: CompressionPreset = 'balanced'
+
+/** Validates the compression settings of a job, filling in defaults. */
+export const jobSettingsSchema = z.object({
+  preset: compressionPresetSchema.default(DEFAULT_COMPRESSION_PRESET),
+})
+
+/** Compression settings of a job, stored as `settings` on the job document. */
+export type JobSettings = z.infer<typeof jobSettingsSchema>
+
+const storedJobSettingsSchema = z
+  .object({ preset: compressionPresetSchema.catch(DEFAULT_COMPRESSION_PRESET) })
+  .catch({ preset: DEFAULT_COMPRESSION_PRESET })
+
+/**
+ * Reads the stored `settings` of a job. Documents without settings, and values this version does
+ * not know, read as the defaults.
+ * @param value the `settings` field of a job document
+ */
+export function readJobSettings(value: unknown): JobSettings {
+  return storedJobSettingsSchema.parse(value ?? {})
+}
 
 /** Largest original image accepted, in bytes (10 MB). */
 export const MAX_INPUT_BYTES = 10 * 1024 * 1024
@@ -47,9 +91,11 @@ export const createJobRequestSchema = z.object({
   contentType: inputTypeSchema,
   /** Exact size of the upload in bytes. */
   size: z.number().int().positive().max(MAX_INPUT_BYTES),
+  /** How to compress the image; defaults apply to anything left out. */
+  settings: jobSettingsSchema.prefault({}),
 })
 
-/** Body of `POST /jobs`. */
+/** Body of `POST /jobs` after validation, with defaults filled in. */
 export type CreateJobRequest = z.infer<typeof createJobRequestSchema>
 
 /** Validates the response of `POST /jobs`. */
@@ -67,10 +113,19 @@ export const createJobResponseSchema = z.object({
 /** Response of `POST /jobs`. */
 export type CreateJobResponse = z.infer<typeof createJobResponseSchema>
 
+/**
+ * Statuses a client can show. `unknown` stands for a status this version does not know, so an older
+ * client keeps working when a status is added.
+ */
+export const jobSummaryStatusSchema = z.enum([...JOB_STATUSES, 'unknown']).catch('unknown')
+
+/** Status of a job as a client sees it. */
+export type JobSummaryStatus = z.infer<typeof jobSummaryStatusSchema>
+
 /** Validates the response of `POST /jobs/:id/submit`. */
 export const submitJobResponseSchema = z.object({
   jobId: jobIdSchema,
-  status: jobStatusSchema,
+  status: jobSummaryStatusSchema,
 })
 
 /** Response of `POST /jobs/:id/submit`: the job and its status after the submit. */
@@ -96,13 +151,19 @@ export const downloadJobResponseSchema = z.object({
 /** Response of `GET /jobs/:id/download`. */
 export type DownloadJobResponse = z.infer<typeof downloadJobResponseSchema>
 
-/** Validates a job as shown to its owner. Storage keys and internal bookkeeping are left out. */
+/**
+ * Validates a job as shown to its owner. Storage keys and internal bookkeeping are left out. Fields
+ * this version does not know are dropped, and types and statuses it does not know are kept or read
+ * as `unknown`, so an open page of an older web build still reads newer jobs.
+ */
 export const jobSummarySchema = z.object({
   id: jobIdSchema,
-  status: jobStatusSchema,
+  status: jobSummaryStatusSchema,
   originalName: z.string(),
-  /** Declared type until the worker detects the real one. */
-  inputType: inputTypeSchema,
+  /** MIME type; the declared one until the worker detects the real one. May name a format this version does not know. */
+  inputType: z.string(),
+  /** MIME type of the result, once the job is done. */
+  outputType: z.string().nullable(),
   inputBytes: z.number().int().nonnegative().nullable(),
   outputBytes: z.number().int().nonnegative().nullable(),
   width: z.number().int().positive().nullable(),
@@ -124,18 +185,20 @@ export interface TimestampLike {
 
 /**
  * Builds the owner's view of a `jobs/{jobId}` document. Works with data from the Admin and the client
- * SDK, and treats fields missing from older documents as empty.
+ * SDK, and treats fields missing from older documents as empty. Returns `null` for a document that
+ * cannot be shown, e.g. one without a name or creation time.
  * @param id document id
  * @param data document data
  */
-export function toJobSummary(id: string, data: Record<string, unknown>): JobSummary {
+export function toJobSummary(id: string, data: Record<string, unknown>): JobSummary | null {
   const iso = (value: unknown) => (isTimestamp(value) ? value.toDate().toISOString() : null)
   const orNull = (value: unknown) => value ?? null
-  return jobSummarySchema.parse({
+  const result = jobSummarySchema.safeParse({
     id,
     status: data.status,
     originalName: data.originalName,
     inputType: data.inputType,
+    outputType: orNull(data.outputType),
     inputBytes: orNull(data.inputBytes),
     outputBytes: orNull(data.outputBytes),
     width: orNull(data.width),
@@ -145,6 +208,7 @@ export function toJobSummary(id: string, data: Record<string, unknown>): JobSumm
     createdAt: iso(data.createdAt),
     finishedAt: iso(data.finishedAt),
   })
+  return result.success ? result.data : null
 }
 
 function isTimestamp(value: unknown): value is TimestampLike {
@@ -169,8 +233,13 @@ export type ListJobsQuery = z.infer<typeof listJobsQuerySchema>
 
 /** Validates the response of `GET /jobs`. */
 export const listJobsResponseSchema = z.object({
-  /** The user's jobs, newest first. */
-  jobs: z.array(jobSummarySchema),
+  /** The user's jobs, newest first. A job this version cannot read is left out instead of failing the page. */
+  jobs: z.array(z.unknown()).transform((jobs) =>
+    jobs.flatMap((job) => {
+      const result = jobSummarySchema.safeParse(job)
+      return result.success ? [result.data] : []
+    }),
+  ),
   /** Cursor of the next page, or `null` on the last page. */
   nextCursor: z.string().nullable(),
 })

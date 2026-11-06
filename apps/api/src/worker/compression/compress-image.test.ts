@@ -1,11 +1,39 @@
+import { COMPRESSION_PRESETS } from '@onetodone/image-compressor-shared'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
-import { fixture } from '../../../test/support/fixtures.js'
+import { fixture, type FixtureName } from '../../../test/support/fixtures.js'
 import { compressImage, MAX_INPUT_PIXELS } from './compress-image.js'
 import { PermanentJobError } from './permanent-job-error.js'
 
 describe('compressImage', () => {
+  const formats: [FixtureName, string, string][] = [
+    ['photo.jpg', 'image/jpeg', 'jpeg'],
+    ['graphic.png', 'image/png', 'png'],
+    ['photo.webp', 'image/webp', 'webp'],
+    ['photo.avif', 'image/avif', 'heif'],
+  ]
+
+  describe.each(COMPRESSION_PRESETS)('with the %s preset', (preset) => {
+    it.each(formats)('compresses %s into a smaller file of the same format', async (name, type, sharpFormat) => {
+      const input = fixture(name)
+
+      const result = await compressImage(input, preset)
+
+      expect(result).toMatchObject({ type, keptOriginal: false, width: 160, height: 120 })
+      expect(result.data.length).toBeLessThan(input.length)
+      expect((await sharp(result.data).metadata()).format).toBe(sharpFormat)
+    })
+  })
+
+  it('makes smaller files with the smaller preset', async () => {
+    for (const [name] of formats) {
+      const balanced = await compressImage(fixture(name), 'balanced')
+      const smaller = await compressImage(fixture(name), 'smaller')
+      expect(smaller.data.length, name).toBeLessThan(balanced.data.length)
+    }
+  })
+
   it('re-encodes a JPEG into a smaller JPEG without metadata', async () => {
     const input = fixture('photo.jpg')
 
@@ -55,13 +83,27 @@ describe('compressImage', () => {
   })
 
   it('rejects bytes that are not an image', async () => {
-    await expect(compressImage(Buffer.from('not an image'))).rejects.toThrow('not a valid JPEG or PNG')
+    await expect(compressImage(Buffer.from('not an image'))).rejects.toThrow(
+      'The file is not a valid JPEG, PNG, WebP or AVIF image',
+    )
   })
 
-  it('rejects image formats other than JPEG and PNG', async () => {
-    const webp = await sharp(fixture('photo.jpg')).webp().toBuffer()
+  it('rejects image formats that are not supported', async () => {
+    const gif = await sharp(fixture('photo.jpg')).gif().toBuffer()
 
-    await expect(compressImage(webp)).rejects.toThrow('Only JPEG and PNG')
+    await expect(compressImage(gif)).rejects.toThrow('Only JPEG, PNG, WebP and AVIF images are supported')
+  })
+
+  it('rejects animated images instead of keeping only the first frame', async () => {
+    const frame = (background: string) =>
+      sharp({ create: { width: 8, height: 8, channels: 3, background } })
+        .png()
+        .toBuffer()
+    const animated = await sharp([await frame('#f00'), await frame('#00f')], { join: { animated: true } })
+      .webp()
+      .toBuffer()
+
+    await expect(compressImage(animated)).rejects.toThrow('Animated images are not supported')
   })
 
   it('rejects images above the pixel limit before decoding them', async () => {
