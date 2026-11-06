@@ -3,6 +3,7 @@ import {
   type CreateJobRequest,
   type CreateJobResponse,
   DOWNLOAD_URL_TTL_SECONDS,
+  downloadFileName,
   type DownloadJobQuery,
   type DownloadJobResponse,
   imageTypeSchema,
@@ -25,7 +26,7 @@ import { ObjectStorage } from '../../common/r2/object-storage.js'
 import { TaskQueue } from '../../common/tasks/task-queue.js'
 import type { AuthUser } from '../auth/auth-user.js'
 import { QuotaService } from '../users/quota.service.js'
-import { contentDisposition, downloadFileName } from './content-disposition.js'
+import { contentDisposition } from './content-disposition.js'
 import { decodeJobCursor, encodeJobCursor } from './job-cursor.js'
 
 const JOBS = 'jobs'
