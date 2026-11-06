@@ -28,7 +28,7 @@ pnpm dev
 
 Open http://localhost:3000 and drop one or more images. The web app reads its `NEXT_PUBLIC_*` variables from the same root `.env`; with `NEXT_PUBLIC_USE_EMULATORS=true` it talks to the local emulators.
 
-The API enqueues compression jobs in Redis (`REDIS_URL`, database 4 by default) and the worker consumes them; a job is retried with exponential backoff up to `QUEUE_MAX_ATTEMPTS` times. Integration tests use database 15 (`TEST_REDIS_URL`) and flush it.
+The API enqueues compression jobs in Redis (`REDIS_URL`, database 4 by default) and the worker consumes them; a job is retried with exponential backoff up to `QUEUE_MAX_ATTEMPTS` times. Once an hour the worker also removes stale jobs: uploads that never finished after a day, jobs left without a task in Redis (marked failed, quota returned) and jobs older than their results (7 days, files included). Integration tests use database 15 (`TEST_REDIS_URL`) and flush it.
 
 Locally the API uses the Firebase Auth and Firestore emulators (UI on http://127.0.0.1:4000). Every route except `GET /health` requires a Firebase ID token in `Authorization: Bearer <token>`.
 
