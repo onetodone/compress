@@ -6,7 +6,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createApiApp } from '../src/api/api.module.js'
 import { apiConfig } from './support/config.js'
-import { QuotaService } from '../src/api/users/quota.service.js'
+import { QuotaService } from '../src/common/quota/quota.service.js'
 import { clearFirestore, linkWithGoogle, signInAnonymously, signUpWithEmail } from './support/emulators.js'
 
 describe('GET /me', () => {

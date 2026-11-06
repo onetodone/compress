@@ -60,3 +60,9 @@ export async function clearFirestore(): Promise<void> {
   const url = `${emulatorUrl('FIRESTORE_EMULATOR_HOST')}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`
   await call(url, { method: 'DELETE' })
 }
+
+/** Deletes every user in the Auth emulator. */
+export async function clearAuth(): Promise<void> {
+  const url = `${emulatorUrl('FIREBASE_AUTH_EMULATOR_HOST')}/emulator/v1/projects/${PROJECT_ID}/accounts`
+  await call(url, { method: 'DELETE' })
+}

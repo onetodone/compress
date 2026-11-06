@@ -3,7 +3,7 @@ import type { MeResponse } from '@onetodone/image-compressor-shared'
 
 import type { AuthUser } from '../../common/auth/auth-user.js'
 import { CurrentUser } from '../auth/current-user.decorator.js'
-import { QuotaService } from './quota.service.js'
+import { QuotaService } from '../../common/quota/quota.service.js'
 
 @Controller('me')
 export class MeController {

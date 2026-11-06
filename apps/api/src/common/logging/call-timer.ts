@@ -1,7 +1,7 @@
 import type { LoggerService } from '@nestjs/common'
 
 /** External services whose calls are timed by {@link CallTimer}. */
-export type ExternalService = 'firestore' | 'auth' | 'r2' | 'cloudinary' | 'redis'
+export type ExternalService = 'firestore' | 'auth' | 'r2' | 'cloudinary' | 'redis' | 'telegram'
 
 /** Measures calls to external services and logs a warning for every call slower than the threshold. */
 export class CallTimer {

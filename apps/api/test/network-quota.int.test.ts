@@ -2,7 +2,7 @@ import { Logger } from '@nestjs/common'
 import { Redis } from 'ioredis'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { RedisNetworkQuota } from '../src/api/users/redis-network-quota.js'
+import { RedisNetworkQuota } from '../src/common/quota/redis-network-quota.js'
 import { CallTimer } from '../src/common/logging/call-timer.js'
 import { TEST_REDIS_URL } from './support/config.js'
 

@@ -1,15 +1,18 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import { utcDayKey } from '@onetodone/image-compressor-shared'
-import { UnrecoverableError } from 'bullmq'
+import { Queue, UnrecoverableError } from 'bullmq'
 import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore'
+import { Redis } from 'ioredis'
 import sharp from 'sharp'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
+import { NOTIFICATION_QUEUE, notifyTaskId } from '../src/common/tasks/task-queue.js'
 import { CompressionConsumer } from '../src/worker/compression/compression.consumer.js'
 import { createTestWorkerApp } from './support/app.js'
 import { clearFirestore } from './support/emulators.js'
 import type { InMemoryImageCdn, InMemoryObjectStorage } from './support/fakes.js'
 import { fixture } from './support/fixtures.js'
+import { queueConfig, TEST_REDIS_URL } from './support/config.js'
 import { flushTestRedis } from './support/redis.js'
 
 const UID = 'user-1'
@@ -23,6 +26,8 @@ describe('compression task', () => {
   let storage: InMemoryObjectStorage
   let cdn: InMemoryImageCdn
   let firestore: Firestore
+  let notifications: Queue
+  let notificationsConnection: Redis
   const today = utcDayKey(new Date())
 
   beforeAll(async () => {
@@ -30,15 +35,25 @@ describe('compression task', () => {
     ;({ app, storage, cdn } = await createTestWorkerApp())
     consumer = app.get(CompressionConsumer)
     firestore = app.get(Firestore)
+    notificationsConnection = new Redis(TEST_REDIS_URL, { maxRetriesPerRequest: null })
+    notifications = new Queue(NOTIFICATION_QUEUE, {
+      connection: notificationsConnection,
+      prefix: queueConfig.QUEUE_PREFIX,
+    })
   })
 
-  afterAll(() => app.close())
+  afterAll(async () => {
+    await notifications.close()
+    notificationsConnection.disconnect()
+    await app.close()
+  })
 
   beforeEach(async () => {
     await clearFirestore()
     storage.objects.clear()
     storage.unavailable.clear()
     cdn.reset()
+    await notifications.obliterate({ force: true })
   })
 
   const deliver = (data: object = { jobId: JOB_ID }, attempt = 1) =>
@@ -173,6 +188,45 @@ describe('compression task', () => {
       expect(await job()).toMatchObject({ status, attempts: 0 })
       expect(storage.objects.size).toBe(1)
     }
+  })
+
+  describe('jobs from a chat', () => {
+    const chat = { source: 'telegram', notify: { chatId: 1, messageId: 2 } }
+    const notification = () => notifications.getJob(notifyTaskId(JOB_ID))
+
+    it('asks the bot to answer once the job is done', async () => {
+      await queueJob(fixture('photo.jpg'), chat)
+
+      expect(await deliver()).toBe('done')
+
+      expect((await notification())?.data).toEqual({ jobId: JOB_ID })
+    })
+
+    it('asks the bot to answer when the job fails', async () => {
+      await queueJob(fixture('corrupt.jpg'), chat)
+
+      expect(await deliver()).toBe('failed')
+
+      expect(await notification()).toBeDefined()
+    })
+
+    it('asks again when a finished job was not answered, e.g. after a crash', async () => {
+      await queueJob(fixture('photo.jpg'), { ...chat, status: 'done' })
+
+      expect(await deliver()).toBe('skipped')
+
+      expect(await notification()).toBeDefined()
+    })
+
+    it('does not ask for jobs already answered or created on the web', async () => {
+      await queueJob(fixture('photo.jpg'), { ...chat, status: 'done', notifiedAt: FieldValue.serverTimestamp() })
+      expect(await deliver()).toBe('skipped')
+
+      await queueJob(fixture('photo.jpg'), { source: 'web', notify: null })
+      expect(await deliver()).toBe('done')
+
+      expect(await notifications.count()).toBe(0)
+    })
   })
 
   it('ignores jobs that do not exist or were never submitted', async () => {

@@ -1,4 +1,5 @@
 import { type JobStatus, TERMINAL_JOB_STATUSES, utcDayKey } from '@onetodone/image-compressor-shared'
+import { z } from 'zod'
 import {
   type DocumentData,
   type DocumentSnapshot,
@@ -17,6 +18,41 @@ export const JOBS = 'jobs'
 /** Firestore collection of users and their quota counters. */
 export const USERS = 'users'
 
+/** Where a job was created: the web app or the Telegram bot. */
+export type JobSource = 'web' | 'telegram'
+
+const chatTargetSchema = z.object({
+  chatId: z.number().int(),
+  messageId: z.number().int().positive(),
+})
+
+/**
+ * Telegram message a job was created from, stored as `notify` on the job. The bot replies to it with
+ * the result or the error once the job is finished.
+ */
+export type ChatTarget = z.infer<typeof chatTargetSchema>
+
+/**
+ * Reads the chat message to answer when a job is finished. Returns `null` for jobs created on the
+ * web, documents without the field and values this version cannot read.
+ * @param job data of a job document
+ */
+export function readChatTarget(job: DocumentData | undefined): ChatTarget | null {
+  const result = chatTargetSchema.safeParse(job?.notify)
+  return result.success ? result.data : null
+}
+
+/**
+ * Whether the owner of a finished job still has to be told about it in a chat: the job was created
+ * from a chat message and no answer was recorded yet.
+ * @param job data of a job document
+ */
+export function awaitsChatAnswer(job: DocumentData | undefined): boolean {
+  return (
+    readChatTarget(job) !== null && TERMINAL_JOB_STATUSES.includes(job?.status as JobStatus) && job?.notifiedAt == null
+  )
+}
+
 /**
  * Marks a job `failed` and gives its quota unit back, in one transaction. `quotaRefunded` and the
  * terminal status guard the refund, so repeated calls never refund twice; nothing is given back once
@@ -24,19 +60,19 @@ export const USERS = 'users'
  *
  * @param message short, user-safe reason stored in `error`
  * @param applies checked against the job inside the transaction; the job is left alone when it returns false
- * @returns whether the job was marked failed
+ * @returns the job as it was written, or `null` when it was left alone
  */
 export function failJob(
   firestore: Firestore,
   jobId: string,
   message: string,
   applies: (job: DocumentSnapshot) => boolean = () => true,
-): Promise<boolean> {
+): Promise<DocumentData | null> {
   const ref = firestore.collection(JOBS).doc(jobId)
   return firestore.runTransaction(async (tx) => {
     const snapshot = await tx.get(ref)
-    if (!snapshot.exists || TERMINAL_JOB_STATUSES.includes(snapshot.get('status') as JobStatus)) return false
-    if (!applies(snapshot)) return false
+    if (!snapshot.exists || TERMINAL_JOB_STATUSES.includes(snapshot.get('status') as JobStatus)) return null
+    if (!applies(snapshot)) return null
 
     let quotaRefunded = snapshot.get('quotaRefunded') === true
     const dayKey = quotaDayKey(snapshot)
@@ -50,8 +86,9 @@ export function failJob(
     }
 
     const now = FieldValue.serverTimestamp()
-    tx.update(ref, { status: 'failed', error: message, quotaRefunded, updatedAt: now, finishedAt: now })
-    return true
+    const update = { status: 'failed', error: message, quotaRefunded, updatedAt: now, finishedAt: now }
+    tx.update(ref, update)
+    return { ...snapshot.data(), ...update }
   })
 }
 

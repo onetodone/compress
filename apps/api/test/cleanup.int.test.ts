@@ -5,7 +5,13 @@ import { Firestore, Timestamp } from 'firebase-admin/firestore'
 import { Redis } from 'ioredis'
 import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
-import { COMPRESS_TASK, COMPRESSION_QUEUE, compressTaskId } from '../src/common/tasks/task-queue.js'
+import {
+  COMPRESS_TASK,
+  COMPRESSION_QUEUE,
+  compressTaskId,
+  NOTIFICATION_QUEUE,
+  notifyTaskId,
+} from '../src/common/tasks/task-queue.js'
 import { CLEANUP_SCHEDULER_ID, CleanupConsumer, MAINTENANCE_QUEUE } from '../src/worker/cleanup/cleanup.consumer.js'
 import { CleanupService } from '../src/worker/cleanup/cleanup.service.js'
 import { CLEANUP_PATTERN } from '../src/worker/cleanup/stale-jobs.js'
@@ -121,6 +127,25 @@ describe('stale job cleanup', () => {
         quotaRefunded: true,
       })
       expect(await jobsToday()).toBe(2)
+    })
+
+    it('asks the bot to answer a failed job that came from a chat', async () => {
+      await seed('lostChatTask00000000', 'queued', {
+        age: 2 * HOUR,
+        source: 'telegram',
+        notify: { chatId: 1, messageId: 2 },
+      })
+
+      expect(await cleanup.run()).toMatchObject({ stuckJobs: 1, errors: 0 })
+
+      const notifications = new Queue(NOTIFICATION_QUEUE, {
+        connection: inspectorConnection,
+        prefix: queueConfig.QUEUE_PREFIX,
+      })
+      expect((await notifications.getJob(notifyTaskId('lostChatTask00000000')))?.data).toEqual({
+        jobId: 'lostChatTask00000000',
+      })
+      await notifications.close()
     })
 
     it('fails a processing job whose task BullMQ has failed', async () => {

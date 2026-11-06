@@ -73,6 +73,25 @@ services:
     ports:
       - '3002:8080'
 
+  # Telegram bot. It needs TELEGRAM_BOT_TOKEN in .env, so it only starts with `--profile bot`.
+  # Telegram allows one process to poll a bot, so never run it next to another copy of that bot.
+  bot:
+    <<: *app
+    profiles: ['bot']
+    command: ['node', '--enable-source-maps', 'dist/main.bot.js']
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: 8080
+      GCP_PROJECT_ID: demo-image-compressor
+      FIREBASE_AUTH_EMULATOR_HOST: emulators:9099
+      FIRESTORE_EMULATOR_HOST: emulators:8080
+      METADATA_SERVER_DETECTION: none
+      REDIS_URL: redis://redis:6379/0
+    depends_on:
+      - emulators
+      - redis
+
   # Static export of the web app. NEXT_PUBLIC_* values are embedded at build time; the browser
   # reaches the API and the emulators through the ports published above.
   web:

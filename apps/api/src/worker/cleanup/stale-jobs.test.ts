@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest'
 
 import type { QueueConfig } from '../../common/config/config.js'
-import { compressionWindowMs, JOB_LIFETIME_MS, staleJobCutoffs } from './stale-jobs.js'
+import { JOB_LIFETIME_MS } from '../../common/jobs/job-lifetime.js'
+import { compressionWindowMs, staleJobCutoffs } from './stale-jobs.js'
 
 const config: QueueConfig = {
   REDIS_URL: 'redis://127.0.0.1:6379/0',

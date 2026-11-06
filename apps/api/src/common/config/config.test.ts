@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { apiConfigSchema, parseConfig, workerConfigSchema } from './config.js'
+import { apiConfigSchema, botConfigSchema, parseConfig, workerConfigSchema } from './config.js'
 
 const apiEnv = {
   GCP_PROJECT_ID: 'demo-image-compressor',
@@ -147,5 +147,14 @@ describe('parseConfig', () => {
 
   it('rejects an empty CORS origin list', () => {
     expect(() => parseConfig(apiConfigSchema, { ...apiEnv, CORS_ORIGINS: ' , ' })).toThrow(/CORS_ORIGINS/)
+  })
+
+  it('requires a bot token in the form BotFather gives and keeps it out of the error', () => {
+    const token = '1234567890:AAH-x_yZ0123456789abcdefghijklmnopq'
+    expect(parseConfig(botConfigSchema, { ...workerEnv, TELEGRAM_BOT_TOKEN: token }).TELEGRAM_BOT_TOKEN).toBe(token)
+    expect(() => parseConfig(botConfigSchema, workerEnv)).toThrow(/TELEGRAM_BOT_TOKEN/)
+    const parse = () => parseConfig(botConfigSchema, { ...workerEnv, TELEGRAM_BOT_TOKEN: 'hidden-value' })
+    expect(parse).toThrow(/TELEGRAM_BOT_TOKEN/)
+    expect(parse).not.toThrow(/hidden-value/)
   })
 })

@@ -8,11 +8,13 @@ const STRING_RULES: [RegExp, string][] = [
   [/\bBearer\s+[\w.~+/=-]+/gi, `Bearer ${REDACTED}`],
   [/\beyJ[\w-]*\.[\w-]+\.[\w-]*/g, REDACTED],
   [/(cloudinary:\/\/)[^@\s]+@/gi, `$1${REDACTED}@`],
+  // A Telegram bot token is part of every Bot API URL, e.g. /bot123456:ABC-def/getMe.
+  [/\d{5,}:[\w-]{30,}/g, REDACTED],
 ]
 
 const MAX_DEPTH = 8
 
-/** Masks presigned URL signatures, bearer tokens, JWTs and credentials embedded in a string. */
+/** Masks presigned URL signatures, bearer tokens, JWTs, bot tokens and credentials embedded in a string. */
 export function maskString(value: string): string {
   return STRING_RULES.reduce((masked, [pattern, replacement]) => masked.replace(pattern, replacement), value)
 }

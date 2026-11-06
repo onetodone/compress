@@ -1,3 +1,11 @@
+import {
+  ChatError,
+  type ChatErrorKind,
+  ChatGateway,
+  type InlineKeyboard,
+  type OutgoingFile,
+  type SendOptions,
+} from '../../src/bot/chat-gateway.js'
 import { ImageCdn } from '../../src/common/cloudinary/image-cdn.js'
 import {
   type DownloadOptions,
@@ -6,7 +14,7 @@ import {
   type StoredObject,
   type UploadConstraints,
 } from '../../src/common/r2/object-storage.js'
-import { NetworkQuota } from '../../src/api/users/network-quota.js'
+import { NetworkQuota } from '../../src/common/quota/network-quota.js'
 import { TaskQueue } from '../../src/common/tasks/task-queue.js'
 
 /** An object held by {@link InMemoryObjectStorage}. */
@@ -71,9 +79,13 @@ export class InMemoryObjectStorage extends ObjectStorage {
   }
 }
 
-/** {@link TaskQueue} that only records the jobs it was asked to enqueue; recorded tasks count as pending. */
+/**
+ * {@link TaskQueue} that only records the jobs it was asked to enqueue; recorded compression tasks
+ * count as pending.
+ */
 export class RecordingTaskQueue extends TaskQueue {
   readonly enqueued: string[] = []
+  readonly notifications: string[] = []
 
   enqueueCompression(jobId: string): Promise<void> {
     this.enqueued.push(jobId)
@@ -82,6 +94,17 @@ export class RecordingTaskQueue extends TaskQueue {
 
   hasPendingCompression(jobId: string): Promise<boolean> {
     return Promise.resolve(this.enqueued.includes(jobId))
+  }
+
+  enqueueNotification(jobId: string): Promise<void> {
+    this.notifications.push(jobId)
+    return Promise.resolve()
+  }
+
+  /** Forgets every recorded task. */
+  reset(): void {
+    this.enqueued.length = 0
+    this.notifications.length = 0
   }
 }
 
@@ -138,5 +161,77 @@ export class InMemoryNetworkQuota extends NetworkQuota {
     const key = `${dayKey}:${network}`
     this.counters.set(key, Math.max((this.counters.get(key) ?? 0) - 1, 0))
     return Promise.resolve()
+  }
+}
+
+/** What {@link InMemoryChatGateway} was asked to do, in order. */
+export type ChatCall =
+  | { type: 'message'; chatId: number; messageId: number; text: string; replyTo?: number; keyboard?: InlineKeyboard }
+  | { type: 'edit'; chatId: number; messageId: number; text: string; keyboard?: InlineKeyboard }
+  | { type: 'document'; chatId: number; file: OutgoingFile; caption?: string; replyTo?: number }
+  | { type: 'reaction'; chatId: number; messageId: number; emoji: string | null }
+  | { type: 'callbackAnswer'; callbackId: string; text?: string }
+
+/** {@link ChatGateway} that records every call and serves files from memory. */
+export class InMemoryChatGateway extends ChatGateway {
+  readonly calls: ChatCall[] = []
+  /** Files users sent, by file id. */
+  readonly files = new Map<string, Buffer>()
+  /** Calls that fail with the given kind of error, until removed; `download` stands for file downloads. */
+  readonly failures = new Map<ChatCall['type'] | 'download', ChatErrorKind>()
+  private nextMessageId = 1000
+
+  sendMessage(chatId: number, text: string, options: SendOptions = {}): Promise<number> {
+    this.fail('message')
+    const messageId = this.nextMessageId++
+    this.calls.push({ type: 'message', chatId, messageId, text, ...options })
+    return Promise.resolve(messageId)
+  }
+
+  editMessage(chatId: number, messageId: number, text: string, keyboard?: InlineKeyboard): Promise<void> {
+    this.fail('edit')
+    this.calls.push({ type: 'edit', chatId, messageId, text, keyboard })
+    return Promise.resolve()
+  }
+
+  sendDocument(chatId: number, file: OutgoingFile, options: SendOptions & { caption?: string } = {}): Promise<void> {
+    this.fail('document')
+    this.calls.push({ type: 'document', chatId, file, caption: options.caption, replyTo: options.replyTo })
+    return Promise.resolve()
+  }
+
+  setReaction(chatId: number, messageId: number, emoji: string | null): Promise<void> {
+    this.fail('reaction')
+    this.calls.push({ type: 'reaction', chatId, messageId, emoji })
+    return Promise.resolve()
+  }
+
+  answerCallback(callbackId: string, text?: string): Promise<void> {
+    this.fail('callbackAnswer')
+    this.calls.push({ type: 'callbackAnswer', callbackId, text })
+    return Promise.resolve()
+  }
+
+  downloadFile(fileId: string): Promise<Buffer> {
+    this.fail('download')
+    const file = this.files.get(fileId)
+    return file ? Promise.resolve(file) : Promise.reject(new ChatError('transient', 'Unknown file'))
+  }
+
+  /** Calls of one type. */
+  callsOf<T extends ChatCall['type']>(type: T): Extract<ChatCall, { type: T }>[] {
+    return this.calls.filter((call): call is Extract<ChatCall, { type: T }> => call.type === type)
+  }
+
+  /** Forgets calls, files and failures. */
+  reset(): void {
+    this.calls.length = 0
+    this.files.clear()
+    this.failures.clear()
+  }
+
+  private fail(call: ChatCall['type'] | 'download'): void {
+    const kind = this.failures.get(call)
+    if (kind) throw new ChatError(kind, `Chat call ${call} failed: ${kind}`)
   }
 }
