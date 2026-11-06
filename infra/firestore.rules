@@ -5,7 +5,8 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
     match /jobs/{jobId} {
-      allow read: if request.auth != null && resource.data.ownerId == request.auth.uid;
+      // A missing document is readable, so a listener sees a deleted job as gone instead of failing.
+      allow read: if request.auth != null && (resource == null || resource.data.ownerId == request.auth.uid);
       allow write: if false;
     }
 

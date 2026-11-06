@@ -18,6 +18,8 @@ export interface LiveJobs {
   jobs: ReadonlyMap<string, JobSummary>
   /** Jobs whose live updates stopped with an error. */
   stopped: ReadonlySet<string>
+  /** Jobs whose document no longer exists: deleted by their owner or removed as stale. */
+  removed: ReadonlySet<string>
 }
 
 /**
@@ -27,6 +29,7 @@ export interface LiveJobs {
 export function useLiveJobs(entries: readonly LiveJobEntry[]): LiveJobs {
   const [live, setLive] = useState<ReadonlyMap<string, JobSummary>>(new Map())
   const [stopped, setStopped] = useState<ReadonlySet<string>>(new Set())
+  const [removed, setRemoved] = useState<ReadonlySet<string>>(new Set())
   const subscriptions = useRef(new Map<string, Unsubscribe>())
 
   const jobs = useMemo(() => {
@@ -41,6 +44,7 @@ export function useLiveJobs(entries: readonly LiveJobEntry[]): LiveJobs {
   // Joined into a string so the effect runs only when the set of running jobs changes.
   const runningKey = entries
     .filter(({ id }) => {
+      if (removed.has(id)) return false
       const job = jobs.get(id)
       return !job || !isTerminalJobStatus(job.status)
     })
@@ -60,6 +64,12 @@ export function useLiveJobs(entries: readonly LiveJobEntry[]): LiveJobs {
       const unsubscribe = onSnapshot(
         doc(getFirebase().firestore, 'jobs', id),
         (snapshot) => {
+          // Offline, the SDK reports a document it has never seen as missing from its cache.
+          if (!snapshot.exists()) {
+            if (snapshot.metadata.fromCache) return
+            setRemoved((ids) => new Set(ids).add(id))
+            return
+          }
           const data = snapshot.data()
           const summary = data ? toJobSummary(snapshot.id, data) : null
           if (summary) setLive((jobs) => new Map(jobs).set(id, summary))
@@ -78,5 +88,5 @@ export function useLiveJobs(entries: readonly LiveJobEntry[]): LiveJobs {
     }
   }, [])
 
-  return { jobs, stopped }
+  return { jobs, stopped, removed }
 }
