@@ -86,6 +86,7 @@ describe('compression task', () => {
     expect(await job()).toMatchObject({
       status: 'done',
       inputType: 'image/jpeg',
+      outputType: 'image/jpeg',
       inputBytes: original.length,
       outputKey,
       outputBytes: result!.size,
@@ -108,9 +109,51 @@ describe('compression task', () => {
     expect(await job()).toMatchObject({
       status: 'done',
       inputType: 'image/png',
+      outputType: 'image/png',
       outputKey: `results/${UID}/${JOB_ID}.png`,
     })
     expect((await sharp(storage.objects.get(`results/${UID}/${JOB_ID}.png`)!.data).metadata()).format).toBe('png')
+  })
+
+  it.each([
+    ['photo.webp', 'image/webp', 'webp'],
+    ['photo.avif', 'image/avif', 'avif'],
+  ] as const)('compresses %s into a smaller result of the same type', async (name, type, extension) => {
+    const original = fixture(name)
+    await queueJob(original, { originalName: name, inputType: type })
+
+    expect(await deliver()).toBe('done')
+
+    const outputKey = `results/${UID}/${JOB_ID}.${extension}`
+    const result = storage.objects.get(outputKey)
+    expect(result?.contentType).toBe(type)
+    expect(result!.size).toBeLessThan(original.length)
+    expect(await job()).toMatchObject({ status: 'done', inputType: type, outputType: type, outputKey })
+  })
+
+  it('compresses with the stored preset', async () => {
+    const original = fixture('photo.jpg')
+    await queueJob(original)
+    await deliver()
+    const balanced = storage.objects.get(`results/${UID}/${JOB_ID}.jpg`)!.size
+
+    await queueJob(original, { settings: { preset: 'smaller' } })
+    await deliver()
+
+    expect(storage.objects.get(`results/${UID}/${JOB_ID}.jpg`)!.size).toBeLessThan(balanced)
+  })
+
+  it('compresses jobs stored without settings or with an unknown preset at the default preset', async () => {
+    const original = fixture('photo.jpg')
+    await queueJob(original, { settings: { preset: 'balanced' } })
+    await deliver()
+    const balanced = storage.objects.get(`results/${UID}/${JOB_ID}.jpg`)!.size
+
+    for (const settings of [undefined, { preset: 'tiny' }]) {
+      await queueJob(original, settings ? { settings } : {})
+      expect(await deliver()).toBe('done')
+      expect(storage.objects.get(`results/${UID}/${JOB_ID}.jpg`)!.size).toBe(balanced)
+    }
   })
 
   it('takes over a job left in processing by a crashed attempt', async () => {
@@ -159,7 +202,7 @@ describe('compression task', () => {
 
     expect(await job()).toMatchObject({
       status: 'failed',
-      error: 'The file is not a valid JPEG or PNG image',
+      error: 'The file is not a valid JPEG, PNG, WebP or AVIF image',
       quotaRefunded: true,
       outputKey: null,
       finishedAt: expect.any(Timestamp),

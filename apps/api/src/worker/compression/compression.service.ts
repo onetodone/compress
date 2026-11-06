@@ -1,5 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { type JobStatus, TERMINAL_JOB_STATUSES, utcDayKey } from '@onetodone/image-compressor-shared'
+import {
+  type CompressionPreset,
+  type JobStatus,
+  readJobSettings,
+  TERMINAL_JOB_STATUSES,
+  utcDayKey,
+} from '@onetodone/image-compressor-shared'
 import { type DocumentSnapshot, FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore'
 
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
@@ -24,6 +30,7 @@ export type TaskOutcome = 'done' | 'failed' | 'skipped'
 interface ClaimedJob {
   ownerId: string
   inputKey: string
+  preset: CompressionPreset
 }
 
 /** Compresses queued jobs. Safe to run more than once for the same job, as the queue may deliver a task twice. */
@@ -81,7 +88,11 @@ export class CompressionService {
           attempts: FieldValue.increment(1),
           updatedAt: FieldValue.serverTimestamp(),
         })
-        return { ownerId: snapshot.get('ownerId') as string, inputKey: snapshot.get('inputKey') as string }
+        return {
+          ownerId: snapshot.get('ownerId') as string,
+          inputKey: snapshot.get('inputKey') as string,
+          preset: readJobSettings(snapshot.get('settings')).preset,
+        }
       }),
     )
   }
@@ -90,7 +101,7 @@ export class CompressionService {
     const original = await this.storage.get(job.inputKey)
     if (!original) throw new PermanentJobError('The uploaded file is no longer available')
 
-    const image = await compressImage(original)
+    const image = await compressImage(original, job.preset)
     const outputKey = resultKey(job.ownerId, jobId, image.type)
     await this.storage.put(outputKey, image.data, image.type)
     const previewUrl = await this.cdn.upload(jobId, image.data)
@@ -106,6 +117,7 @@ export class CompressionService {
         tx.update(ref, {
           status: 'done',
           inputType: image.type,
+          outputType: image.type,
           inputBytes: original.length,
           outputKey,
           outputBytes: image.data.length,
