@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto'
 
 import { Global, Inject, Logger, Module, type OnApplicationShutdown } from '@nestjs/common'
-import { type App, deleteApp, initializeApp } from 'firebase-admin/app'
+import { type App, type AppOptions, cert, deleteApp, initializeApp } from 'firebase-admin/app'
 import { Auth, getAuth } from 'firebase-admin/auth'
 import { Firestore, getFirestore } from 'firebase-admin/firestore'
 
@@ -11,6 +11,20 @@ import { CONFIG } from '../config/config.module.js'
 /** Injection token for the Firebase Admin app of this Nest application. */
 export const FIREBASE_APP = Symbol('FIREBASE_APP')
 
+/**
+ * Options of the Firebase Admin app. A service account key named by `GOOGLE_APPLICATION_CREDENTIALS`
+ * is loaded as a certificate credential, so custom tokens are signed locally with its private key;
+ * the same key passed as Application Default Credentials would make the SDK sign through the IAM
+ * `signBlob` API, which the service account has no role for. Without a key (emulators) the SDK
+ * uses Application Default Credentials.
+ * @param projectId Firebase project id
+ * @param env process environment
+ */
+export function firebaseAppOptions(projectId: string, env: NodeJS.ProcessEnv): AppOptions {
+  const keyFile = env.GOOGLE_APPLICATION_CREDENTIALS
+  return keyFile ? { projectId, credential: cert(keyFile) } : { projectId }
+}
+
 function createFirebaseApp(config: BaseConfig): App {
   const { FIREBASE_AUTH_EMULATOR_HOST: auth, FIRESTORE_EMULATOR_HOST: firestore } = process.env
   if (auth || firestore) {
@@ -18,10 +32,8 @@ function createFirebaseApp(config: BaseConfig): App {
     const level = config.NODE_ENV === 'production' ? 'warn' : 'log'
     new Logger('Firebase')[level](`Using emulators: auth ${auth ?? 'off'}, firestore ${firestore ?? 'off'}`)
   }
-  // Without explicit credentials the SDK uses Application Default Credentials (in production the
-  // service account key named by GOOGLE_APPLICATION_CREDENTIALS), or none with the emulators.
   // A unique name keeps several Nest applications in one process (tests) independent.
-  return initializeApp({ projectId: config.GCP_PROJECT_ID }, `app-${randomUUID()}`)
+  return initializeApp(firebaseAppOptions(config.GCP_PROJECT_ID, process.env), `app-${randomUUID()}`)
 }
 
 /**
