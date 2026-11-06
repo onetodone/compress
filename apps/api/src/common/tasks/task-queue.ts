@@ -28,4 +28,10 @@ export abstract class TaskQueue {
    * is still pending is not added twice, and the worker ignores jobs that are already processed.
    */
   abstract enqueueCompression(jobId: string): Promise<void>
+
+  /**
+   * Whether the compression task of a job is still waiting, delayed for a retry or running. A task
+   * that is missing, completed or failed will not touch the job again.
+   */
+  abstract hasPendingCompression(jobId: string): Promise<boolean>
 }

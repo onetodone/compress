@@ -1,25 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common'
-import {
-  type CompressionPreset,
-  type JobStatus,
-  readJobSettings,
-  TERMINAL_JOB_STATUSES,
-  utcDayKey,
-} from '@onetodone/image-compressor-shared'
-import { type DocumentSnapshot, FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore'
+import { type CompressionPreset, type JobStatus, readJobSettings } from '@onetodone/image-compressor-shared'
+import { FieldValue, Firestore } from 'firebase-admin/firestore'
 
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
+import { failJob, JOBS } from '../../common/jobs/job-records.js'
 import { CallTimer } from '../../common/logging/call-timer.js'
-import { readStoredUsage, refundQuota } from '../../common/quota/quota.js'
 import { resultKey } from '../../common/r2/object-keys.js'
 import { ObjectStorage } from '../../common/r2/object-storage.js'
 import { compressImage } from './compress-image.js'
 import { PermanentJobError } from './permanent-job-error.js'
 
-const JOBS = 'jobs'
-const USERS = 'users'
-
-const RETRIES_EXHAUSTED = 'The image could not be processed. Please try again later.'
+/** Error of a job whose compression did not succeed within the attempt limit. */
+export const RETRIES_EXHAUSTED = 'The image could not be processed. Please try again later.'
 
 /**
  * Result of one task attempt: the job was finished (`done`, `failed`), or there was nothing to do
@@ -138,47 +130,13 @@ export class CompressionService {
     return 'skipped'
   }
 
-  /**
-   * Marks the job `failed` and gives its quota unit back. `quotaRefunded` and the terminal status
-   * guard the refund, so repeated deliveries never refund twice.
-   */
-  private fail(jobId: string, message: string): Promise<TaskOutcome> {
-    const ref = this.ref(jobId)
-    return this.timer.measure('firestore', 'jobs.fail', () =>
-      this.firestore.runTransaction(async (tx) => {
-        const snapshot = await tx.get(ref)
-        if (!snapshot.exists || TERMINAL_JOB_STATUSES.includes(snapshot.get('status') as JobStatus)) return 'skipped'
-
-        let quotaRefunded = snapshot.get('quotaRefunded') === true
-        const dayKey = quotaDayKey(snapshot)
-        if (!quotaRefunded && dayKey) {
-          const userRef = this.firestore.collection(USERS).doc(snapshot.get('ownerId') as string)
-          const refunded = refundQuota(readStoredUsage((await tx.get(userRef)).data()), dayKey)
-          if (refunded) {
-            tx.update(userRef, { jobsToday: refunded.jobsToday })
-            quotaRefunded = true
-          }
-        }
-
-        const now = FieldValue.serverTimestamp()
-        tx.update(ref, { status: 'failed', error: message, quotaRefunded, updatedAt: now, finishedAt: now })
-        return 'failed'
-      }),
-    )
+  /** Marks the job `failed` and gives its quota unit back; repeated deliveries never refund twice. */
+  private async fail(jobId: string, message: string): Promise<TaskOutcome> {
+    const failed = await this.timer.measure('firestore', 'jobs.fail', () => failJob(this.firestore, jobId, message))
+    return failed ? 'failed' : 'skipped'
   }
 
   private ref(jobId: string) {
     return this.firestore.collection(JOBS).doc(jobId)
   }
-}
-
-/**
- * UTC day the job's quota unit was counted on. Jobs submitted before `quotaDayKey` was stored fall
- * back to their creation day.
- */
-function quotaDayKey(job: DocumentSnapshot): string | null {
-  const dayKey: unknown = job.get('quotaDayKey')
-  if (typeof dayKey === 'string') return dayKey
-  const createdAt: unknown = job.get('createdAt')
-  return createdAt instanceof Timestamp ? utcDayKey(createdAt.toDate()) : null
 }

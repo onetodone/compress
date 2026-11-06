@@ -109,6 +109,7 @@ function Workspace({ user }: { user: SessionUser }) {
   )
   const live = useLiveJobs(entries)
 
+  // A job removed on the server (stale, or deleted in another tab) leaves the list.
   const items: ListItem[] = [
     ...uploads.map((upload) => ({
       key: upload.key,
@@ -116,7 +117,7 @@ function Workspace({ user }: { user: SessionUser }) {
       jobId: upload.stage === 'submitted' ? upload.jobId : null,
     })),
     ...earlierJobs.map((job) => ({ key: job.id, upload: null, jobId: job.id })),
-  ]
+  ].filter((item) => item.jobId === null || !live.removed.has(item.jobId))
   const downloadable = items.flatMap((item) => {
     const job = item.jobId ? live.jobs.get(item.jobId) : undefined
     return job?.status === 'done' ? [job] : []

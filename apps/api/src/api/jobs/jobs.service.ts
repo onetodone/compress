@@ -20,6 +20,7 @@ import {
 import { type DocumentReference, FieldPath, FieldValue, Firestore, type Timestamp } from 'firebase-admin/firestore'
 
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
+import { JOBS, removeJobFiles } from '../../common/jobs/job-records.js'
 import { CallTimer } from '../../common/logging/call-timer.js'
 import { originalKey } from '../../common/r2/object-keys.js'
 import { ObjectStorage } from '../../common/r2/object-storage.js'
@@ -28,8 +29,6 @@ import type { AuthUser } from '../auth/auth-user.js'
 import { QuotaService } from '../users/quota.service.js'
 import { contentDisposition } from './content-disposition.js'
 import { decodeJobCursor, encodeJobCursor } from './job-cursor.js'
-
-const JOBS = 'jobs'
 
 /** Creates, submits, lists, downloads and deletes the jobs of the current user. */
 @Injectable()
@@ -166,7 +165,10 @@ export class JobsService {
   /** Returns a short-lived URL of the compressed result, to save or to display in the browser. */
   async download(user: AuthUser, jobId: string, { disposition }: DownloadJobQuery): Promise<DownloadJobResponse> {
     const snapshot = await this.timer.measure('firestore', 'jobs.get', () => this.ref(jobId).get())
-    if (!snapshot.exists || snapshot.get('ownerId') !== user.uid) throw new NotFoundException('Job not found')
+    // Old jobs are removed with their files, so a tab opened earlier may still ask for one.
+    if (!snapshot.exists || snapshot.get('ownerId') !== user.uid) {
+      throw new NotFoundException('The image is no longer available')
+    }
     const outputKey = snapshot.get('outputKey') as string | null | undefined
     if (snapshot.get('status') !== 'done' || !outputKey) throw new ConflictException('The job is not finished')
 
@@ -198,18 +200,9 @@ export class JobsService {
     )
     if (!job) throw new NotFoundException('Job not found')
 
-    const removals: [string, Promise<void>][] = [['original', this.storage.delete(job.inputKey as string)]]
-    if (typeof job.outputKey === 'string') removals.push(['result', this.storage.delete(job.outputKey)])
-    if (job.previewUrl != null) removals.push(['preview', this.cdn.delete(jobId)])
-    const results = await Promise.allSettled(removals.map(([, removal]) => removal))
-    results.forEach((result, index) => {
-      if (result.status === 'rejected') {
-        this.logger.error(
-          { jobId, file: removals[index]![0], err: result.reason },
-          'Could not remove a file of a deleted job',
-        )
-      }
-    })
+    for (const { file, error } of await removeJobFiles(this.storage, this.cdn, jobId, job)) {
+      this.logger.error({ jobId, file, err: error }, 'Could not remove a file of a deleted job')
+    }
   }
 
   /** Returns the size of the uploaded original after checking it against the job. */

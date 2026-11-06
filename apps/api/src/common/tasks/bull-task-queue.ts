@@ -9,6 +9,9 @@ import { COMPRESS_TASK, COMPRESSION_QUEUE, type CompressTask, compressTaskId, Ta
 /** Failed tasks stay in Redis this long for inspection, then BullMQ removes them. */
 const FAILED_TASK_RETENTION_SECONDS = 7 * 24 * 60 * 60
 
+/** Task states after which BullMQ never runs the task again; `unknown` means there is no such task. */
+const SETTLED_TASK_STATES = new Set<string>(['completed', 'failed', 'unknown'])
+
 /** {@link TaskQueue} on a BullMQ queue in Redis. */
 export class BullTaskQueue extends TaskQueue {
   private readonly queue: Queue<CompressTask>
@@ -42,6 +45,13 @@ export class BullTaskQueue extends TaskQueue {
     await this.timer.measure('redis', 'queue.add', () =>
       this.queue.add(COMPRESS_TASK, { jobId }, { jobId: compressTaskId(jobId) }),
     )
+  }
+
+  async hasPendingCompression(jobId: string): Promise<boolean> {
+    const state = await this.timer.measure('redis', 'queue.getJobState', () =>
+      this.queue.getJobState(compressTaskId(jobId)),
+    )
+    return !SETTLED_TASK_STATES.has(state)
   }
 
   /** Closes the queue and its Redis connection. */
