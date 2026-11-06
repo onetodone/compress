@@ -32,7 +32,7 @@ export function AccountControl({ user, signInWithGoogle, signOut }: AccountContr
 
   return (
     <div className="flex flex-col items-end gap-1 text-sm">
-      {user.isAnonymous ? (
+      {user.kind === 'anonymous' ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
           <span className="text-zinc-600 dark:text-zinc-400">Sign in for more images a day</span>
           <button

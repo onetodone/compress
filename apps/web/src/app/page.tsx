@@ -6,7 +6,6 @@ import {
   type JobSummary,
   DEFAULT_COMPRESSION_PRESET,
   imageFormats,
-  MAX_INPUT_BYTES,
 } from '@onetodone/image-compressor-shared'
 import { useMemo, useState } from 'react'
 
@@ -22,7 +21,6 @@ import { type LiveJobEntry, useLiveJobs } from '@/hooks/use-live-jobs'
 import { useQuota } from '@/hooks/use-quota'
 import { type Upload, useUploads } from '@/hooks/use-uploads'
 import { quotaLimitMessage } from '@/lib/api-error'
-import { formatBytes } from '@/lib/files'
 
 export default function HomePage() {
   const { user, error: authError, signInWithGoogle, signOut } = useAuthUser()
@@ -33,7 +31,7 @@ export default function HomePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Image Compressor</h1>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Smaller {imageFormats.names('and')} files, same look. Up to {formatBytes(MAX_INPUT_BYTES)} per image.
+            Smaller {imageFormats.names('and')} files, same look.
           </p>
         </div>
         {user && <AccountControl user={user} signInWithGoogle={signInWithGoogle} signOut={signOut} />}
@@ -50,7 +48,7 @@ export default function HomePage() {
         // A different user gets a fresh workspace: no uploads, history or quota of the previous one.
         <Workspace key={user.uid} user={user} />
       ) : (
-        <DropZone disabled hint="Starting a session…" onFiles={() => undefined} />
+        <DropZone disabled hint="Starting a session…" maxInputBytes={null} onFiles={() => undefined} />
       )}
     </main>
   )
@@ -86,7 +84,7 @@ function uploadTotals(uploads: readonly Upload[], jobs: ReadonlyMap<string, JobS
 }
 
 function Workspace({ user }: { user: SessionUser }) {
-  const { quota, networkLimitReached } = useQuota(user.uid, user.isAnonymous)
+  const { quota, limits, limitsFailed, networkLimitReached } = useQuota(user.uid, user.kind)
   const history = useJobHistory(user.uid)
   const { uploads, addFiles, removeUploads } = useUploads()
   const [preset, setPreset] = useState<CompressionPreset>(DEFAULT_COMPRESSION_PRESET)
@@ -142,22 +140,25 @@ function Workspace({ user }: { user: SessionUser }) {
   const remaining = quota === null ? null : networkLimitReached ? 0 : Math.max(quota.limit - quota.used, 0)
   const limitHint =
     quota !== null && quota.used >= quota.limit
-      ? quotaLimitMessage('daily_limit', user.isAnonymous)
+      ? quotaLimitMessage('daily_limit', user.kind)
       : networkLimitReached
-        ? quotaLimitMessage('network_daily_limit', user.isAnonymous)
+        ? quotaLimitMessage('network_daily_limit', user.kind)
         : null
+  const dropHint =
+    limits === null ? (limitsFailed ? 'Could not load your limits. Retrying…' : 'Loading your limits…') : limitHint
 
   return (
     <>
       <section aria-label="Upload" className="flex flex-col gap-3">
         <div className="flex flex-wrap items-start justify-between gap-4">
-          <PresetPicker value={preset} disabled={limitHint !== null} onChange={setPreset} />
+          <PresetPicker value={preset} disabled={dropHint !== null} onChange={setPreset} />
           {quota && <QuotaMeter quota={quota} exhausted={networkLimitReached} />}
         </div>
         <DropZone
-          disabled={limitHint !== null}
-          hint={limitHint}
-          onFiles={(files) => addFiles(files, preset, remaining)}
+          disabled={limits === null || limitHint !== null}
+          hint={dropHint}
+          maxInputBytes={limits?.maxInputBytes ?? null}
+          onFiles={(files) => limits && addFiles(files, preset, remaining, limits.maxInputBytes)}
         />
       </section>
 
@@ -177,7 +178,7 @@ function Workspace({ user }: { user: SessionUser }) {
             upload={item.upload}
             job={(item.jobId && live.jobs.get(item.jobId)) || null}
             liveStopped={item.jobId !== null && live.stopped.has(item.jobId)}
-            isAnonymous={user.isAnonymous}
+            accountKind={user.kind}
             onRemove={() => removeItem(item)}
           />
         ))}

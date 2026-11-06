@@ -129,14 +129,14 @@ describe('UploadQueue', () => {
 
   it('shows a safe message for other failures and goes on with the next file', async () => {
     const { steps } = fakeSteps()
-    vi.mocked(steps.create).mockRejectedValueOnce(new ApiError(400, 'The file must be between 1 byte and 10 MB'))
+    vi.mocked(steps.create).mockRejectedValueOnce(new ApiError(400, 'The file must be at most 10 MB'))
     vi.mocked(steps.upload).mockRejectedValueOnce(new Error('socket hang up'))
     const { states, onChange } = track()
     const queue = new UploadQueue(steps, onChange, 1)
     for (const name of ['a', 'b', 'c']) queue.add(name, file, request(name))
     await settle(queue)
 
-    expect(states.get('a')).toMatchObject({ stage: 'error', error: 'The file must be between 1 byte and 10 MB' })
+    expect(states.get('a')).toMatchObject({ stage: 'error', error: 'The file must be at most 10 MB' })
     expect(states.get('b')).toMatchObject({ stage: 'error', error: 'Something went wrong. Try again.' })
     expect(states.get('c')).toMatchObject({ stage: 'submitted' })
     expect(steps.discard).not.toHaveBeenCalled()

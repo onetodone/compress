@@ -33,8 +33,9 @@ export interface Uploads {
   /**
    * Starts uploads of picked files, compressed with `preset`.
    * @param remaining jobs the user may still submit today, if known; files beyond it are marked as limited
+   * @param maxInputBytes largest file the user may upload; larger files are rejected
    */
-  addFiles: (files: Iterable<File>, preset: CompressionPreset, remaining: number | null) => void
+  addFiles: (files: Iterable<File>, preset: CompressionPreset, remaining: number | null, maxInputBytes: number) => void
   /** Drops uploads from the list. */
   removeUploads: (keys: ReadonlySet<string>) => void
 }
@@ -61,7 +62,7 @@ export function useUploads(): Uploads {
   )
 
   const addFiles = useCallback(
-    (files: Iterable<File>, preset: CompressionPreset, remaining: number | null) => {
+    (files: Iterable<File>, preset: CompressionPreset, remaining: number | null, maxInputBytes: number) => {
       // Files already on their way are not counted in the quota yet.
       let allowance = remaining === null ? Infinity : remaining - queue.pending
       const added: Upload[] = []
@@ -69,7 +70,7 @@ export function useUploads(): Uploads {
       for (const file of files) {
         const key = crypto.randomUUID()
         const base = { key, name: file.name, size: file.size, progress: 0, jobId: null, error: null, limit: null }
-        const checked = checkFile(file, preset)
+        const checked = checkFile(file, maxInputBytes, preset)
         if (!checked.ok) {
           added.push({ ...base, stage: 'rejected', error: checked.reason })
         } else if (allowance <= 0) {

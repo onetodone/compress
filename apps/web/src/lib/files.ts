@@ -6,8 +6,8 @@ import {
   downloadFileName,
   imageFormats,
   type ImageType,
+  formatBytes,
   type JobSummary,
-  MAX_INPUT_BYTES,
 } from '@onetodone/image-compressor-shared'
 
 /** A file the user picked, either accepted for upload or rejected with a reason. */
@@ -30,16 +30,18 @@ export function imageTypeOf(file: Pick<File, 'name' | 'type'>): ImageType | unde
 /**
  * Checks a picked file against the limits of `POST /jobs` before anything is uploaded.
  * @param file file metadata as the browser reports it
+ * @param maxInputBytes largest file the user may upload, from `GET /me`
  * @param preset compression preset the job is created with
  */
 export function checkFile(
   file: Pick<File, 'name' | 'type' | 'size'>,
+  maxInputBytes: number,
   preset: CompressionPreset = DEFAULT_COMPRESSION_PRESET,
 ): CheckedFile {
   const contentType = imageTypeOf(file)
   if (!contentType) return { ok: false, reason: `Only ${imageFormats.names('and')}` }
   if (file.size === 0) return { ok: false, reason: 'The file is empty' }
-  if (file.size > MAX_INPUT_BYTES) return { ok: false, reason: `Larger than ${formatBytes(MAX_INPUT_BYTES)}` }
+  if (file.size > maxInputBytes) return { ok: false, reason: `Larger than ${formatBytes(maxInputBytes)}` }
   const result = createJobRequestSchema.safeParse({
     originalName: file.name,
     contentType,
@@ -47,22 +49,6 @@ export function checkFile(
     settings: { preset },
   })
   return result.success ? { ok: true, request: result.data } : { ok: false, reason: 'Unsupported file name' }
-}
-
-/**
- * Formats a byte count for display, e.g. `19.4 KB`.
- * @param bytes non-negative byte count
- */
-export function formatBytes(bytes: number): string {
-  if (bytes < 1024) return `${bytes} B`
-  const units = ['KB', 'MB', 'GB']
-  let value = bytes / 1024
-  let unit = 0
-  while (value >= 1024 && unit < units.length - 1) {
-    value /= 1024
-    unit++
-  }
-  return `${value < 10 ? value.toFixed(1) : Math.round(value)} ${units[unit]}`
 }
 
 /**

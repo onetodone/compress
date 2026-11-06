@@ -1,5 +1,6 @@
 'use client'
 
+import type { AccountKind } from '@onetodone/image-compressor-shared'
 import { onIdTokenChanged, signInAnonymously, type User } from 'firebase/auth'
 import { useCallback, useEffect, useState } from 'react'
 
@@ -9,7 +10,7 @@ import { getFirebase } from '@/lib/firebase'
 /** The parts of the Firebase user the UI renders. */
 export interface SessionUser {
   uid: string
-  isAnonymous: boolean
+  kind: AccountKind
   /** Display name, or email when there is none; `null` for anonymous users. */
   name: string | null
 }
@@ -30,7 +31,7 @@ export interface AuthState {
 function toSessionUser(user: User): SessionUser {
   return {
     uid: user.uid,
-    isAnonymous: user.isAnonymous,
+    kind: user.isAnonymous ? 'anonymous' : 'registered',
     name: user.isAnonymous ? null : (user.displayName ?? user.email),
   }
 }
