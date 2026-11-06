@@ -71,13 +71,17 @@ export class InMemoryObjectStorage extends ObjectStorage {
   }
 }
 
-/** {@link TaskQueue} that only records the jobs it was asked to enqueue. */
+/** {@link TaskQueue} that only records the jobs it was asked to enqueue; recorded tasks count as pending. */
 export class RecordingTaskQueue extends TaskQueue {
   readonly enqueued: string[] = []
 
   enqueueCompression(jobId: string): Promise<void> {
     this.enqueued.push(jobId)
     return Promise.resolve()
+  }
+
+  hasPendingCompression(jobId: string): Promise<boolean> {
+    return Promise.resolve(this.enqueued.includes(jobId))
   }
 }
 

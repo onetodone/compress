@@ -525,6 +525,15 @@ describe('jobs', () => {
       await download('not-a-job-id').expect(404)
       await http().get(`/jobs/${jobId}/download`).expect(401)
     })
+
+    it('tells a tab that still shows a removed job that the image is gone', async () => {
+      const { jobId } = await finishedJob()
+      await firestore.doc(`jobs/${jobId}`).delete()
+
+      const response = await download(jobId).expect(404)
+
+      expect(response.body).toMatchObject({ message: 'The image is no longer available' })
+    })
   })
 
   describe('DELETE /jobs/:id', () => {
