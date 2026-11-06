@@ -5,7 +5,7 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createApiApp } from '../src/api/api.module.js'
 import type { AuthUser } from '../src/common/auth/auth-user.js'
-import { QuotaService } from '../src/api/users/quota.service.js'
+import { QuotaService } from '../src/common/quota/quota.service.js'
 import { apiConfig } from './support/config.js'
 import { clearFirestore } from './support/emulators.js'
 

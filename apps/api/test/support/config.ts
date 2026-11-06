@@ -1,6 +1,7 @@
 import type {
   ApiConfig,
   BaseConfig,
+  BotConfig,
   CloudinaryConfig,
   QueueConfig,
   R2Config,
@@ -56,4 +57,15 @@ export const apiConfig: ApiConfig = {
   QUOTA_ANONYMOUS_DAILY: 5,
   QUOTA_SIGNED_IN_DAILY: 30,
   QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
+}
+
+export const botConfig: BotConfig = {
+  ...baseConfig,
+  ...r2Config,
+  ...cloudinaryConfig,
+  ...queueConfig,
+  QUOTA_ANONYMOUS_DAILY: 5,
+  QUOTA_SIGNED_IN_DAILY: 30,
+  QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
+  TELEGRAM_BOT_TOKEN: '123456:test-token',
 }

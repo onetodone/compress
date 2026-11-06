@@ -1,6 +1,6 @@
 import type { Redis } from 'ioredis'
 
-import { CallTimer } from '../../common/logging/call-timer.js'
+import { CallTimer } from '../logging/call-timer.js'
 import { NetworkQuota } from './network-quota.js'
 
 // Counters outlive their UTC day a little, so a request at midnight never finds a fresh key early.

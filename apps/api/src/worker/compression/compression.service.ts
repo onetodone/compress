@@ -1,12 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common'
 import { type CompressionPreset, type JobStatus, readJobSettings } from '@onetodone/image-compressor-shared'
-import { FieldValue, Firestore } from 'firebase-admin/firestore'
+import { type DocumentData, FieldValue, Firestore } from 'firebase-admin/firestore'
 
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
-import { failJob, JOBS } from '../../common/jobs/job-records.js'
+import { awaitsChatAnswer, failJob, JOBS } from '../../common/jobs/job-records.js'
 import { CallTimer } from '../../common/logging/call-timer.js'
 import { resultKey } from '../../common/r2/object-keys.js'
 import { ObjectStorage } from '../../common/r2/object-storage.js'
+import { TaskQueue } from '../../common/tasks/task-queue.js'
 import { compressImage } from './compress-image.js'
 import { PermanentJobError } from './permanent-job-error.js'
 
@@ -23,7 +24,12 @@ interface ClaimedJob {
   ownerId: string
   inputKey: string
   preset: CompressionPreset
+  /** The job document as claimed. */
+  data: DocumentData
 }
+
+/** A job taken for processing, or the data of one there is nothing to do for (`undefined` if missing). */
+type Claim = { job: ClaimedJob } | { skipped: DocumentData | undefined }
 
 /** Compresses queued jobs. Safe to run more than once for the same job, as the queue may deliver a task twice. */
 @Injectable()
@@ -34,6 +40,7 @@ export class CompressionService {
     private readonly firestore: Firestore,
     private readonly storage: ObjectStorage,
     private readonly cdn: ImageCdn,
+    private readonly tasks: TaskQueue,
     private readonly timer: CallTimer,
   ) {}
 
@@ -51,11 +58,15 @@ export class CompressionService {
       return this.fail(jobId, RETRIES_EXHAUSTED)
     }
 
-    const job = await this.claim(jobId)
-    if (!job) return 'skipped'
+    const claim = await this.claim(jobId)
+    if ('skipped' in claim) {
+      // An earlier attempt may have finished the job and crashed before asking for the chat answer.
+      await this.notifyChat(jobId, claim.skipped)
+      return 'skipped'
+    }
 
     try {
-      return await this.compress(jobId, job)
+      return await this.compress(jobId, claim.job)
     } catch (error) {
       if (error instanceof PermanentJobError) return this.fail(jobId, error.message)
       if (attempt < maxAttempts) throw error
@@ -66,24 +77,27 @@ export class CompressionService {
 
   /**
    * Moves a queued job to `processing`. A job already in `processing` is taken over, because the
-   * attempt that set it may have crashed. Returns `null` when there is nothing to process.
+   * attempt that set it may have crashed.
    */
-  private claim(jobId: string): Promise<ClaimedJob | null> {
+  private claim(jobId: string): Promise<Claim> {
     const ref = this.ref(jobId)
     return this.timer.measure('firestore', 'jobs.claim', () =>
-      this.firestore.runTransaction(async (tx) => {
+      this.firestore.runTransaction(async (tx): Promise<Claim> => {
         const snapshot = await tx.get(ref)
         const status = snapshot.get('status') as JobStatus | undefined
-        if (status !== 'queued' && status !== 'processing') return null
+        if (status !== 'queued' && status !== 'processing') return { skipped: snapshot.data() }
         tx.update(ref, {
           status: 'processing',
           attempts: FieldValue.increment(1),
           updatedAt: FieldValue.serverTimestamp(),
         })
         return {
-          ownerId: snapshot.get('ownerId') as string,
-          inputKey: snapshot.get('inputKey') as string,
-          preset: readJobSettings(snapshot.get('settings')).preset,
+          job: {
+            ownerId: snapshot.get('ownerId') as string,
+            inputKey: snapshot.get('inputKey') as string,
+            preset: readJobSettings(snapshot.get('settings')).preset,
+            data: snapshot.data()!,
+          },
         }
       }),
     )
@@ -107,7 +121,7 @@ export class CompressionService {
         if (snapshot.get('status') !== 'processing') return 'skipped'
         const now = FieldValue.serverTimestamp()
         tx.update(ref, {
-          status: 'done',
+          status: 'done' satisfies JobStatus,
           inputType: image.type,
           outputType: image.type,
           inputBytes: original.length,
@@ -123,6 +137,7 @@ export class CompressionService {
         return 'done'
       }),
     )
+    if (outcome === 'done') await this.notifyChat(jobId, { ...job.data, status: 'done' })
     if (outcome !== 'deleted') return outcome
 
     // The owner deleted the job while it was processing, after its files had been removed.
@@ -133,7 +148,14 @@ export class CompressionService {
   /** Marks the job `failed` and gives its quota unit back; repeated deliveries never refund twice. */
   private async fail(jobId: string, message: string): Promise<TaskOutcome> {
     const failed = await this.timer.measure('firestore', 'jobs.fail', () => failJob(this.firestore, jobId, message))
-    return failed ? 'failed' : 'skipped'
+    if (!failed) return 'skipped'
+    await this.notifyChat(jobId, failed)
+    return 'failed'
+  }
+
+  /** Asks the bot to answer the chat message a finished job came from, if there is one to answer. */
+  private async notifyChat(jobId: string, job: DocumentData | undefined): Promise<void> {
+    if (awaitsChatAnswer(job)) await this.tasks.enqueueNotification(jobId)
   }
 
   private ref(jobId: string) {

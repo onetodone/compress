@@ -8,6 +8,7 @@ import { ConfigModule } from '../common/config/config.module.js'
 import { FirebaseModule } from '../common/firebase/firebase.module.js'
 import { HealthModule } from '../common/health/health.module.js'
 import { LoggingModule } from '../common/logging/logging.module.js'
+import { QuotaModule } from '../common/quota/quota.module.js'
 import { R2Module } from '../common/r2/r2.module.js'
 import { TasksModule } from '../common/tasks/tasks.module.js'
 import { AuthModule } from './auth/auth.module.js'
@@ -28,7 +29,8 @@ export class ApiModule {
         TasksModule.register(config),
         AuthModule,
         HealthModule,
-        UsersModule.register(config),
+        QuotaModule.register(config),
+        UsersModule,
         JobsModule,
       ],
     }

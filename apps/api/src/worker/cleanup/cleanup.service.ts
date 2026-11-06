@@ -12,7 +12,7 @@ import {
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
 import type { WorkerConfig } from '../../common/config/config.js'
 import { CONFIG } from '../../common/config/config.module.js'
-import { failJob, JOBS, removeJobFiles } from '../../common/jobs/job-records.js'
+import { awaitsChatAnswer, failJob, JOBS, removeJobFiles } from '../../common/jobs/job-records.js'
 import { CallTimer } from '../../common/logging/call-timer.js'
 import { ObjectStorage } from '../../common/r2/object-storage.js'
 import { TaskQueue } from '../../common/tasks/task-queue.js'
@@ -88,6 +88,7 @@ export class CleanupService {
           'Job without a compression task failed',
         )
         result.stuckJobs++
+        if (awaitsChatAnswer(failed)) await this.tasks.enqueueNotification(job.id)
       }
     })
 

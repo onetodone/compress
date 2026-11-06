@@ -21,6 +21,23 @@ export function compressTaskId(jobId: string): string {
   return `compress-${jobId}`
 }
 
+/** Name of the BullMQ queue that carries chat notifications about finished jobs, consumed by the bot. */
+export const NOTIFICATION_QUEUE = 'notifications'
+
+/** Name of a notification task within {@link NOTIFICATION_QUEUE}. */
+export const NOTIFY_TASK = 'notify'
+
+/** Validates the data of a notification task. */
+export const notifyTaskSchema = z.object({ jobId: jobIdSchema })
+
+/** Data of a notification task. */
+export type NotifyTask = z.infer<typeof notifyTaskSchema>
+
+/** BullMQ id of the notification task of a job; see {@link compressTaskId}. */
+export function notifyTaskId(jobId: string): string {
+  return `notify-${jobId}`
+}
+
 /** Hands jobs to the worker. Injected by this class, so tests can replace the queue. */
 export abstract class TaskQueue {
   /**
@@ -34,4 +51,10 @@ export abstract class TaskQueue {
    * that is missing, completed or failed will not touch the job again.
    */
   abstract hasPendingCompression(jobId: string): Promise<boolean>
+
+  /**
+   * Asks the bot to answer the chat message a finished job was created from. A task that is still
+   * pending is not added twice; the bot also skips jobs it has already answered.
+   */
+  abstract enqueueNotification(jobId: string): Promise<void>
 }

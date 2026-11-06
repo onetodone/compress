@@ -25,6 +25,12 @@ describe('maskString', () => {
     expect(maskString('cloudinary://key:secret@demo')).toBe(`cloudinary://${REDACTED}@demo`)
   })
 
+  it('masks a Telegram bot token inside a Bot API URL', () => {
+    const url = 'https://api.telegram.org/file/bot1234567890:AAH-x_yZ0123456789abcdefghijklmnopq/documents/file_1.jpg'
+
+    expect(maskString(url)).toBe(`https://api.telegram.org/file/bot${REDACTED}/documents/file_1.jpg`)
+  })
+
   it('leaves ordinary text untouched', () => {
     expect(maskString('GET /jobs/abc 200')).toBe('GET /jobs/abc 200')
   })

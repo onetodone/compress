@@ -13,13 +13,16 @@
     "watch:tsc": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "watch:api": "node --watch --enable-source-maps --env-file-if-exists=../../.env dist/main.api.js",
     "watch:worker": "PORT=3002 node --watch --enable-source-maps --env-file-if-exists=../../.env dist/main.worker.js",
+    "watch:bot": "PORT=3003 node --watch --enable-source-maps --env-file-if-exists=../../.env dist/main.bot.js",
     "start": "pnpm run \"/^start:/\"",
     "start:api": "node --enable-source-maps --env-file-if-exists=../../.env dist/main.api.js",
-    "start:worker": "PORT=3002 node --enable-source-maps --env-file-if-exists=../../.env dist/main.worker.js"
+    "start:worker": "PORT=3002 node --enable-source-maps --env-file-if-exists=../../.env dist/main.worker.js",
+    "start:bot": "PORT=3003 node --enable-source-maps --env-file-if-exists=../../.env dist/main.bot.js"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.1154.0",
     "@aws-sdk/s3-request-presigner": "^3.1154.0",
+    "@grammyjs/auto-retry": "^2.0.2",
     "@nestjs/common": "^12.2.0",
     "@nestjs/core": "^12.2.0",
     "@nestjs/platform-express": "^12.2.0",
@@ -27,6 +30,7 @@
     "bullmq": "^6.4.2",
     "cloudinary": "^2.11.0",
     "firebase-admin": "^14.5.0",
+    "grammy": "^1.46.0",
     "ioredis": "^5.11.1",
     "nestjs-pino": "^5.3.1",
     "pino": "^10.4.0",

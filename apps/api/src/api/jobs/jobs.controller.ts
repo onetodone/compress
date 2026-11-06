@@ -15,7 +15,7 @@ import {
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js'
 import type { AuthUser } from '../../common/auth/auth-user.js'
 import { CurrentUser } from '../auth/current-user.decorator.js'
-import { JobsService } from './jobs.service.js'
+import { JobsService } from '../../common/jobs/jobs.service.js'
 
 @Controller('jobs')
 export class JobsController {

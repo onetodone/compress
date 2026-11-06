@@ -76,6 +76,15 @@ export const workerConfigSchema = baseConfigSchema.extend({
   QUEUE_CONCURRENCY: z.coerce.number().int().min(1).default(2),
 })
 
+/** Environment variables of the Telegram bot. */
+export const botConfigSchema = baseConfigSchema.extend({
+  ...r2ConfigSchema.shape,
+  ...cloudinaryConfigSchema.shape,
+  ...queueConfigSchema.shape,
+  ...quotaConfigSchema.shape,
+  TELEGRAM_BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/, 'Must look like <bot id>:<secret> as given by @BotFather'),
+})
+
 /** Settings shared by the API and the worker. */
 export type BaseConfig = z.infer<typeof baseConfigSchema>
 /** Cloudflare R2 credentials and bucket. */
@@ -90,6 +99,8 @@ export type QuotaConfig = z.infer<typeof quotaConfigSchema>
 export type ApiConfig = z.infer<typeof apiConfigSchema>
 /** Validated configuration of the worker service. */
 export type WorkerConfig = z.infer<typeof workerConfigSchema>
+/** Validated configuration of the Telegram bot. */
+export type BotConfig = z.infer<typeof botConfigSchema>
 
 /**
  * Validates environment variables against a schema.

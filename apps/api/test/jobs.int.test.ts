@@ -106,6 +106,8 @@ describe('jobs', () => {
       })
       expect(await job(jobId)).toMatchObject({
         ownerId: user.uid,
+        source: 'web',
+        notify: null,
         status: 'awaiting_upload',
         originalName: 'photo.jpg',
         inputType: 'image/jpeg',

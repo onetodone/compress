@@ -1,8 +1,9 @@
 # syntax=docker/dockerfile:1
 
-# One image serves both processes:
+# One image serves all processes:
 #   API     node dist/main.api.js (default command)
 #   worker  node dist/main.worker.js
+#   bot     node dist/main.bot.js
 
 FROM node:24-slim AS base
 RUN npm install -g corepack@latest && corepack enable
