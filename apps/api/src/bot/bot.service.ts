@@ -1,24 +1,45 @@
-import { ConflictException, HttpException, HttpStatus, Injectable, Logger, NotFoundException } from '@nestjs/common'
+import {
+  ConflictException,
+  HttpException,
+  HttpStatus,
+  Inject,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common'
 import {
   createJobRequestSchema,
   DEFAULT_COMPRESSION_PRESET,
   type ImageType,
   imageFormats,
   imageTypeSchema,
+  TELEGRAM_LOGIN_FRAGMENT,
 } from '@onetodone/image-compressor-shared'
 
+import { AccountLinkService, type LinkOutcome } from '../common/accounts/account-link.service.js'
+import { LINK_CODE_LIFETIME_MS } from '../common/accounts/link-codes.js'
+import { TelegramIdentityService, type TelegramUser } from '../common/accounts/telegram-identity.service.js'
 import type { AuthUser } from '../common/auth/auth-user.js'
+import type { BotConfig } from '../common/config/config.js'
+import { CONFIG } from '../common/config/config.module.js'
 import { JobsService } from '../common/jobs/jobs.service.js'
 import { QuotaService } from '../common/quota/quota.service.js'
 import { ObjectStorage } from '../common/r2/object-storage.js'
 import {
+  ALREADY_LINKED_TEXT,
   type BotMessage,
+  CANCELLED_TEXT,
   dailyLimitText,
   deleteQuestion,
   GENERIC_ERROR,
   helpText,
   IMAGES_PAGE_SIZE,
   imagesPage,
+  LINK_EXPIRED_TEXT,
+  LINKED_TEXT,
+  linkQuestion,
+  LOGIN_UNAVAILABLE_TEXT,
+  loginMessage,
   pageCount,
   PHOTO_TEXT,
   quotaText,
@@ -26,12 +47,14 @@ import {
   startText,
   TEXT_HINT,
   tooLargeText,
+  UNLINK_REFUSED_TEXT,
+  UNLINKED_TEXT,
+  unlinkQuestion,
   unsupportedText,
   WORKING_REACTION,
 } from './bot-messages.js'
 import { parseCallback } from './callback-data.js'
 import { ChatError, ChatGateway } from './chat-gateway.js'
-import { TelegramIdentityService, type TelegramUser } from './telegram-identity.service.js'
 
 /** A message a user sent to the bot in a private chat. */
 export interface IncomingMessage {
@@ -72,10 +95,47 @@ export class BotService {
     private readonly jobs: JobsService,
     private readonly quota: QuotaService,
     private readonly storage: ObjectStorage,
+    private readonly accounts: AccountLinkService,
+    @Inject(CONFIG) private readonly config: BotConfig,
   ) {}
 
-  async start({ chatId }: IncomingMessage): Promise<void> {
-    await this.chat.sendMessage(chatId, startText())
+  /**
+   * Answers `/start`. A start parameter `link_<code>` comes from "Connect Telegram" on the website
+   * and connects this Telegram account to that website account.
+   */
+  async start(message: IncomingMessage, payload = '', now = new Date()): Promise<void> {
+    if (payload.startsWith(LINK_PREFIX)) {
+      await this.linkFromWebsite(message, payload.slice(LINK_PREFIX.length), now)
+      return
+    }
+    await this.chat.sendMessage(message.chatId, startText())
+  }
+
+  /** Answers `/login` with a one-time link that signs in on the website as this account. */
+  async login(message: IncomingMessage, now = new Date()): Promise<void> {
+    const website = this.config.WEB_APP_URL
+    if (!website) {
+      await this.chat.sendMessage(message.chatId, LOGIN_UNAVAILABLE_TEXT)
+      return
+    }
+    const user = await this.identities.userFor(message.from)
+    const { code } = await this.accounts.createLoginCode(message.from, user.uid, now)
+    const { text, keyboard } = loginMessage(
+      `${website}/#${TELEGRAM_LOGIN_FRAGMENT}=${code}`,
+      LINK_CODE_LIFETIME_MS / 60_000,
+    )
+    await this.chat.sendMessage(message.chatId, text, { keyboard })
+  }
+
+  /** Answers `/unlink`: asks before disconnecting, if the account has another way in. */
+  async unlink(message: IncomingMessage): Promise<void> {
+    const user = await this.identities.userFor(message.from)
+    if (!(await this.accounts.links(user.uid)).googleLinked) {
+      await this.chat.sendMessage(message.chatId, UNLINK_REFUSED_TEXT)
+      return
+    }
+    const { text, keyboard } = unlinkQuestion()
+    await this.chat.sendMessage(message.chatId, text, { keyboard })
   }
 
   async help(message: IncomingMessage): Promise<void> {
@@ -145,9 +205,32 @@ export class BotService {
       await this.chat.answerCallback(callbackId, 'This button no longer works. Send /my_images again.')
       return
     }
+    if (action.type === 'cancel') {
+      await this.chat.answerCallback(callbackId)
+      await this.edit(chatId, messageId, { text: CANCELLED_TEXT })
+      return
+    }
+    if (action.type === 'link') {
+      const outcome = await this.accounts.linkTelegram(action.code, callback.from, now)
+      await this.chat.answerCallback(callbackId)
+      await this.edit(chatId, messageId, { text: linkOutcomeText(outcome) })
+      return
+    }
 
     const user = await this.identities.userFor(callback.from)
     switch (action.type) {
+      case 'unlink': {
+        await this.chat.answerCallback(callbackId)
+        // Google may have been unlinked since the question was asked.
+        if (!(await this.accounts.links(user.uid)).googleLinked) {
+          await this.edit(chatId, messageId, { text: UNLINK_REFUSED_TEXT })
+          return
+        }
+        await this.accounts.unlinkTelegram(user.uid, callback.from.id)
+        await this.edit(chatId, messageId, { text: UNLINKED_TEXT })
+        return
+      }
+
       case 'page':
         await this.chat.answerCallback(callbackId)
         await this.showPage(user, chatId, messageId, action.page, now)
@@ -191,6 +274,23 @@ export class BotService {
         await this.showPage(user, chatId, messageId, action.page, now)
         return
     }
+  }
+
+  private async linkFromWebsite(message: IncomingMessage, code: string, now: Date): Promise<void> {
+    const target = await this.accounts.linkTarget(code, now)
+    if (!target) {
+      await this.chat.sendMessage(message.chatId, LINK_EXPIRED_TEXT)
+      return
+    }
+    const current = await this.identities.find(message.from)
+    if (current === target.uid) {
+      await this.chat.sendMessage(message.chatId, ALREADY_LINKED_TEXT)
+      return
+    }
+    // Always asked, so a link someone else sent cannot connect this account to theirs unnoticed.
+    const images = current ? (await this.jobs.page({ uid: current, kind: 'registered' }, 0, 1)).total : 0
+    const { text, keyboard } = linkQuestion(target.label, images, code)
+    await this.chat.sendMessage(message.chatId, text, { keyboard })
   }
 
   /** Replaces a `/my_images` message with a page, or the last page if fewer remain. */
@@ -239,6 +339,14 @@ export class BotService {
     this.logger.error({ userId: user.uid, err: error }, 'Could not accept a file')
     return GENERIC_ERROR
   }
+}
+
+const LINK_PREFIX = 'link_'
+
+function linkOutcomeText(outcome: LinkOutcome): string {
+  if (outcome === 'linked') return LINKED_TEXT
+  if (outcome === 'already_linked') return ALREADY_LINKED_TEXT
+  return LINK_EXPIRED_TEXT
 }
 
 /** The image type of a document: its declared MIME type, or its extension when the type is unknown. */

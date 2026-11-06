@@ -4,6 +4,7 @@ import type { Bot, Context } from 'grammy'
 import { BOT_COMMANDS, GENERIC_ERROR } from './bot-messages.js'
 import { BotService, type IncomingMessage } from './bot.service.js'
 import { ChatGateway } from './chat-gateway.js'
+import type { TelegramUser } from '../common/accounts/telegram-identity.service.js'
 
 /** Injection token of the grammY bot. */
 export const TELEGRAM_BOT = Symbol('TELEGRAM_BOT')
@@ -24,7 +25,9 @@ export class TelegramPoller implements OnApplicationBootstrap, OnModuleDestroy {
 
   async onApplicationBootstrap(): Promise<void> {
     const chat = this.bot.chatType('private')
-    chat.command('start', (ctx) => this.run('start', ctx, () => this.handlers.start(messageOf(ctx))))
+    chat.command('start', (ctx) => this.run('start', ctx, () => this.handlers.start(messageOf(ctx), ctx.match)))
+    chat.command('login', (ctx) => this.run('login', ctx, () => this.handlers.login(messageOf(ctx))))
+    chat.command('unlink', (ctx) => this.run('unlink', ctx, () => this.handlers.unlink(messageOf(ctx))))
     chat.command('help', (ctx) => this.run('help', ctx, () => this.handlers.help(messageOf(ctx))))
     chat.command('quota', (ctx) => this.run('quota', ctx, () => this.handlers.showQuota(messageOf(ctx))))
     chat.command('my_images', (ctx) => this.run('my_images', ctx, () => this.handlers.showImages(messageOf(ctx))))
@@ -49,7 +52,7 @@ export class TelegramPoller implements OnApplicationBootstrap, OnModuleDestroy {
         this.handlers.callback({
           chatId: message.chat.id,
           messageId: message.message_id,
-          from: { id: ctx.from.id },
+          from: userOf(ctx.from),
           callbackId: ctx.callbackQuery.id,
           data: ctx.callbackQuery.data,
         }),
@@ -106,6 +109,10 @@ function messageOf(ctx: Context & { message: { message_id: number; chat: { id: n
   return {
     chatId: ctx.message.chat.id,
     messageId: ctx.message.message_id,
-    from: { id: ctx.from!.id },
+    from: userOf(ctx.from!),
   }
+}
+
+function userOf(from: { id: number; username?: string }): TelegramUser {
+  return from.username ? { id: from.id, username: from.username } : { id: from.id }
 }

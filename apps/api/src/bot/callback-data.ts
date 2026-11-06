@@ -1,4 +1,4 @@
-import { jobIdSchema } from '@onetodone/image-compressor-shared'
+import { jobIdSchema, linkCodeSchema } from '@onetodone/image-compressor-shared'
 
 /** What a button under a bot message asks for. Pages are 0-based. */
 export type CallbackAction =
@@ -6,9 +6,12 @@ export type CallbackAction =
   | { type: 'download'; jobId: string }
   | { type: 'askDelete'; jobId: string; page: number }
   | { type: 'delete'; jobId: string; page: number }
+  | { type: 'link'; code: string }
+  | { type: 'unlink' }
+  | { type: 'cancel' }
 
 // Short prefixes keep the data within Telegram's 64 bytes.
-const PREFIX = { page: 'p', download: 'd', askDelete: 'a', delete: 'x' } as const
+const PREFIX = { page: 'p', download: 'd', askDelete: 'a', delete: 'x', link: 'l', unlink: 'u', cancel: 'c' } as const
 
 const MAX_PAGE = 10_000
 
@@ -22,6 +25,11 @@ export function encodeCallback(action: CallbackAction): string {
     case 'askDelete':
     case 'delete':
       return `${PREFIX[action.type]}:${action.jobId}:${action.page}`
+    case 'link':
+      return `${PREFIX.link}:${action.code}`
+    case 'unlink':
+    case 'cancel':
+      return PREFIX[action.type]
   }
 }
 
@@ -31,7 +39,15 @@ export function encodeCallback(action: CallbackAction): string {
  */
 export function parseCallback(data: string): CallbackAction | null {
   const [prefix, first, second, ...rest] = data.split(':')
-  if (rest.length > 0 || first === undefined) return null
+  if (rest.length > 0) return null
+  if (first === undefined) {
+    if (prefix === PREFIX.unlink) return { type: 'unlink' }
+    if (prefix === PREFIX.cancel) return { type: 'cancel' }
+    return null
+  }
+  if (prefix === PREFIX.link) {
+    return second === undefined && linkCodeSchema.safeParse(first).success ? { type: 'link', code: first } : null
+  }
   if (prefix === PREFIX.page) return second === undefined ? pageAction(first) : null
   if (!jobIdSchema.safeParse(first).success) return null
   if (prefix === PREFIX.download) return second === undefined ? { type: 'download', jobId: first } : null
