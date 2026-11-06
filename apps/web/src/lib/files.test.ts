@@ -1,7 +1,7 @@
 import { MAX_INPUT_BYTES } from '@onetodone/image-compressor-shared'
 import { describe, expect, it } from 'vitest'
 
-import { checkFile, formatBytes, savedPercent } from './files'
+import { checkFile, formatBytes, resultFileName, savedPercent } from './files'
 
 describe('checkFile', () => {
   it('accepts a supported image within the size limit', () => {
@@ -62,5 +62,22 @@ describe('savedPercent', () => {
   it('returns zero when nothing was saved', () => {
     expect(savedPercent(1000, 1000)).toBe(0)
     expect(savedPercent(0, 0)).toBe(0)
+  })
+})
+
+describe('resultFileName', () => {
+  it('names the result after the original with the extension of the result type', () => {
+    expect(resultFileName({ originalName: 'scan.jpg', inputType: 'image/jpeg', outputType: 'image/png' })).toBe(
+      'scan.png',
+    )
+    expect(resultFileName({ originalName: 'holiday.JPEG', inputType: 'image/jpeg', outputType: null })).toBe(
+      'holiday.jpg',
+    )
+  })
+
+  it('keeps the original name for a type this version does not know', () => {
+    expect(resultFileName({ originalName: 'photo.heic', inputType: 'image/heic', outputType: 'image/heic' })).toBe(
+      'photo.heic',
+    )
   })
 })

@@ -81,3 +81,13 @@ export const IMAGE_TYPES = imageFormats.types
 
 /** Validates the MIME type of a supported image format. */
 export const imageTypeSchema = imageFormats.schema
+
+/**
+ * Name of a downloaded result: the original name with any image extension replaced by that of the
+ * result type.
+ * @param originalName name of the uploaded file
+ * @param type MIME type of the result
+ */
+export function downloadFileName(originalName: string, type: ImageType): string {
+  return `${imageFormats.stripExtension(originalName)}.${imageFormats.extension(type)}`
+}

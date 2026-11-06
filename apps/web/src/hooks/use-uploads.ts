@@ -1,102 +1,94 @@
 'use client'
 
-import type { CompressionPreset } from '@onetodone/image-compressor-shared'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import type { CompressionPreset, QuotaErrorCode } from '@onetodone/image-compressor-shared'
+import { useCallback, useState } from 'react'
 
 import { api } from '@/lib/api'
-import { ApiError } from '@/lib/api-error'
 import { checkFile } from '@/lib/files'
-import { UploadError, uploadFile } from '@/lib/upload'
+import { uploadFile } from '@/lib/upload'
+import { type QueuedPatch, type QueuedStage, UploadQueue } from '@/lib/upload-queue'
 
 /** A file picked in this session, from the client-side check until the job is queued. */
 export interface Upload {
   key: string
   name: string
   size: number
-  /** Object URL of the original, for the before/after view; `null` for rejected files. */
-  objectUrl: string | null
-  stage: 'rejected' | 'creating' | 'uploading' | 'submitting' | 'submitted' | 'error'
+  /** `rejected` failed the client-side check; the other stages come from the upload queue. */
+  stage: 'rejected' | QueuedStage
   /** Uploaded fraction from 0 to 1. */
   progress: number
   jobId: string | null
+  /** User-safe reason of a `rejected` or `error` upload. */
   error: string | null
+  /** The limit that refused a `limited` upload. */
+  limit: QuotaErrorCode | null
 }
 
-/** Uploads picked in this session, newest first, and functions that start more or drop one. */
+/**
+ * Uploads picked in this session, the latest pick first and the files of each pick in their order,
+ * and functions that start more or drop some.
+ */
 export interface Uploads {
   uploads: Upload[]
-  /** Starts uploads of picked files, compressed with `preset`. */
-  addFiles: (files: Iterable<File>, preset: CompressionPreset) => void
-  /** Drops an upload from the list and releases its object URL. */
-  removeUpload: (key: string) => void
+  /**
+   * Starts uploads of picked files, compressed with `preset`.
+   * @param remaining jobs the user may still submit today, if known; files beyond it are marked as limited
+   */
+  addFiles: (files: Iterable<File>, preset: CompressionPreset, remaining: number | null) => void
+  /** Drops uploads from the list. */
+  removeUploads: (keys: ReadonlySet<string>) => void
 }
 
-/** Runs the upload flow for each picked file: create the job, upload to R2, submit. */
+/** Runs the upload flow for each picked file through an {@link UploadQueue}. */
 export function useUploads(): Uploads {
   const [uploads, setUploads] = useState<Upload[]>([])
-  const objectUrls = useRef(new Set<string>())
 
-  useEffect(() => {
-    const urls = objectUrls.current
-    return () => {
-      for (const url of urls) URL.revokeObjectURL(url)
-      urls.clear()
-    }
-  }, [])
-
-  const update = useCallback((key: string, patch: Partial<Upload>) => {
+  const update = useCallback((key: string, patch: QueuedPatch) => {
     setUploads((current) => current.map((upload) => (upload.key === key ? { ...upload, ...patch } : upload)))
   }, [])
 
-  const run = useCallback(
-    async (key: string, file: File, request: Parameters<typeof api.createJob>[0]) => {
-      try {
-        const { jobId, uploadUrl } = await api.createJob(request)
-        update(key, { stage: 'uploading', jobId })
-        await uploadFile(uploadUrl, file, request.contentType, (progress) => update(key, { progress }))
-        update(key, { stage: 'submitting', progress: 1 })
-        await api.submitJob(jobId)
-        update(key, { stage: 'submitted' })
-      } catch (error) {
-        const message =
-          error instanceof ApiError || error instanceof UploadError ? error.message : 'Something went wrong. Try again.'
-        update(key, { stage: 'error', error: message })
-      }
-    },
-    [update],
+  const [queue] = useState(
+    () =>
+      new UploadQueue(
+        {
+          create: (request) => api.createJob(request),
+          upload: uploadFile,
+          submit: (jobId) => api.submitJob(jobId),
+          discard: (jobId) => api.deleteJob(jobId),
+        },
+        update,
+      ),
   )
 
   const addFiles = useCallback(
-    (files: Iterable<File>, preset: CompressionPreset) => {
+    (files: Iterable<File>, preset: CompressionPreset, remaining: number | null) => {
+      // Files already on their way are not counted in the quota yet.
+      let allowance = remaining === null ? Infinity : remaining - queue.pending
       const added: Upload[] = []
+      const accepted: [string, File, Parameters<UploadQueue['add']>[2]][] = []
       for (const file of files) {
         const key = crypto.randomUUID()
+        const base = { key, name: file.name, size: file.size, progress: 0, jobId: null, error: null, limit: null }
         const checked = checkFile(file, preset)
-        const base = { key, name: file.name, size: file.size, progress: 0, jobId: null }
         if (!checked.ok) {
-          added.push({ ...base, objectUrl: null, stage: 'rejected', error: checked.reason })
-          continue
+          added.push({ ...base, stage: 'rejected', error: checked.reason })
+        } else if (allowance <= 0) {
+          added.push({ ...base, stage: 'limited', limit: 'daily_limit' })
+        } else {
+          allowance--
+          added.push({ ...base, stage: 'waiting' })
+          accepted.push([key, file, checked.request])
         }
-        const objectUrl = URL.createObjectURL(file)
-        objectUrls.current.add(objectUrl)
-        added.push({ ...base, objectUrl, stage: 'creating', error: null })
-        void run(key, file, checked.request)
       }
-      setUploads((current) => [...added.reverse(), ...current])
+      setUploads((current) => [...added, ...current])
+      for (const [key, file, request] of accepted) queue.add(key, file, request)
     },
-    [run],
+    [queue],
   )
 
-  const removeUpload = useCallback((key: string) => {
-    setUploads((current) => {
-      const objectUrl = current.find((upload) => upload.key === key)?.objectUrl
-      if (objectUrl) {
-        URL.revokeObjectURL(objectUrl)
-        objectUrls.current.delete(objectUrl)
-      }
-      return current.filter((upload) => upload.key !== key)
-    })
+  const removeUploads = useCallback((keys: ReadonlySet<string>) => {
+    setUploads((current) => current.filter((upload) => !keys.has(upload.key)))
   }, [])
 
-  return { uploads, addFiles, removeUpload }
+  return { uploads, addFiles, removeUploads }
 }

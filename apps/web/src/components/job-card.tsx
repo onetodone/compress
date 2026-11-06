@@ -4,12 +4,10 @@ import type { JobSummary, JobSummaryStatus } from '@onetodone/image-compressor-s
 import Image from 'next/image'
 import { type ReactNode, useState } from 'react'
 
-import { BeforeAfter } from '@/components/before-after'
-import { useLiveJob } from '@/hooks/use-live-job'
 import { useResultUrl } from '@/hooks/use-result-url'
 import type { Upload } from '@/hooks/use-uploads'
 import { api } from '@/lib/api'
-import { ApiError } from '@/lib/api-error'
+import { ApiError, quotaLimitMessage } from '@/lib/api-error'
 import { formatBytes, savedPercent } from '@/lib/files'
 
 const STATUS_LABELS: Record<JobSummaryStatus, string> = {
@@ -21,27 +19,14 @@ const STATUS_LABELS: Record<JobSummaryStatus, string> = {
   unknown: 'Reload the page to see the latest state',
 }
 
-const UPLOAD_LABELS: Record<Exclude<Upload['stage'], 'submitted' | 'rejected' | 'error'>, string> = {
+const UPLOAD_LABELS: Record<Extract<Upload['stage'], 'waiting' | 'creating' | 'uploading' | 'submitting'>, string> = {
+  waiting: 'Waiting…',
   creating: 'Preparing…',
   uploading: 'Uploading…',
   submitting: 'Queuing…',
 }
 
-function Card({ name, actions, children }: { name: string; actions?: ReactNode; children: ReactNode }) {
-  return (
-    <article className="flex flex-col gap-3 rounded-xl border border-zinc-200 bg-white p-4 dark:border-zinc-800 dark:bg-zinc-900">
-      <header className="flex items-center justify-between gap-3">
-        <h3 className="min-w-0 truncate text-sm font-medium" title={name}>
-          {name}
-        </h3>
-        {actions}
-      </header>
-      {children}
-    </article>
-  )
-}
-
-const BUTTON =
+export const BUTTON =
   'rounded-full border border-zinc-300 px-3 py-1 text-xs font-medium hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:hover:bg-zinc-800'
 
 function actionError(error: unknown): string {
@@ -100,14 +85,13 @@ function JobActions({ jobId, canDownload, onDeleted }: { jobId: string; canDownl
 }
 
 /** Small picture of a finished job: the CDN preview, or the result itself when there is no preview. */
-function Thumbnail({ job }: { job: JobSummary }) {
-  const done = job.status === 'done'
+function Thumbnail({ job }: { job: JobSummary | null }) {
+  const done = job?.status === 'done'
   const resultUrl = useResultUrl(done && !job.previewUrl ? job.id : null)
-  const src = job.previewUrl ?? resultUrl
-  if (!done) return null
+  const src = done ? (job.previewUrl ?? resultUrl) : null
   return (
-    <div className="relative h-16 w-16 shrink-0 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
-      {src && <Image src={src} alt="" fill sizes="64px" className="object-cover" />}
+    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
+      {src && <Image src={src} alt="" fill sizes="56px" className="object-cover" />}
     </div>
   )
 }
@@ -159,7 +143,7 @@ function Result({ job }: { job: JobSummary }) {
   )
 }
 
-function JobState({ job, liveError }: { job: JobSummary; liveError: string | null }) {
+function JobState({ job, liveStopped }: { job: JobSummary; liveStopped: boolean }) {
   if (job.status === 'done') return <Result job={job} />
   if (job.status === 'failed') return <Problem>{job.error ?? 'The image could not be compressed.'}</Problem>
   if (job.status === 'awaiting_upload' || job.status === 'unknown') {
@@ -168,62 +152,72 @@ function JobState({ job, liveError }: { job: JobSummary; liveError: string | nul
   return (
     <>
       <Progress label={STATUS_LABELS[job.status]} value={null} />
-      {liveError && <Problem>{liveError}</Problem>}
+      {liveStopped && <Problem>Live updates stopped. Reload the page to refresh.</Problem>}
     </>
   )
 }
 
-/** A file picked in this session: upload progress, then the live job with a before/after view. */
-export function UploadCard({ upload, onRemove }: { upload: Upload; onRemove: () => void }) {
-  const { job, error } = useLiveJob(upload.stage === 'submitted' ? upload.jobId : null)
-  // The comparison shows the file the user downloads, not a CDN rendition of it.
-  const resultUrl = useResultUrl(job?.status === 'done' ? job.id : null)
-
-  let body: ReactNode
-  if (upload.stage === 'rejected' || upload.stage === 'error') body = <Problem>{upload.error}</Problem>
-  else if (upload.stage !== 'submitted') {
-    body = (
-      <Progress label={UPLOAD_LABELS[upload.stage]} value={upload.stage === 'uploading' ? upload.progress : null} />
-    )
-  } else if (!job) body = <Progress label={STATUS_LABELS.queued} value={null} />
-  else body = <JobState job={job} liveError={error} />
-
-  // While the file is still being uploaded there is nothing to delete yet.
-  const settled = upload.stage === 'submitted' || upload.stage === 'error'
-  const actions =
-    upload.jobId && settled ? (
-      <JobActions jobId={upload.jobId} canDownload={job?.status === 'done'} onDeleted={onRemove} />
-    ) : upload.stage === 'rejected' ? (
-      <button type="button" className={BUTTON} onClick={onRemove}>
-        Dismiss
-      </button>
-    ) : null
-
-  return (
-    <Card name={upload.name} actions={actions}>
-      {body}
-      {job?.status === 'done' && upload.objectUrl && (
-        <BeforeAfter before={upload.objectUrl} after={resultUrl} width={job.width} height={job.height} />
-      )}
-    </Card>
-  )
+function UploadState({ upload, isAnonymous }: { upload: Upload; isAnonymous: boolean }) {
+  switch (upload.stage) {
+    case 'rejected':
+    case 'error':
+      return <Problem>{upload.error}</Problem>
+    case 'limited':
+      return (
+        <p className="text-sm text-amber-700 dark:text-amber-400">
+          {quotaLimitMessage(upload.limit ?? 'daily_limit', isAnonymous)}
+        </p>
+      )
+    case 'waiting':
+      return <span className="text-sm text-zinc-500 dark:text-zinc-400">{UPLOAD_LABELS.waiting}</span>
+    case 'submitted':
+      return <Progress label={STATUS_LABELS.queued} value={null} />
+    default:
+      return (
+        <Progress label={UPLOAD_LABELS[upload.stage]} value={upload.stage === 'uploading' ? upload.progress : null} />
+      )
+  }
 }
 
-/** A job from an earlier visit, followed live while it is still running. */
-export function HistoryCard({ initial, onDeleted }: { initial: JobSummary; onDeleted: () => void }) {
-  const { job, error } = useLiveJob(initial.id, initial)
-  const current = job ?? initial
+interface JobCardProps {
+  /** The file as picked in this session, or `null` for a job from an earlier visit. */
+  upload: Upload | null
+  /** Latest known state of the job, once there is one. */
+  job: JobSummary | null
+  liveStopped: boolean
+  isAnonymous: boolean
+  /** Removes the card after the job was deleted or a refused file was dismissed. */
+  onRemove: () => void
+}
+
+/** One image of the list: the upload while it runs, then the live job with its result. */
+export function JobCard({ upload, job, liveStopped, isAnonymous, onRemove }: JobCardProps) {
+  const name = job?.originalName ?? upload?.name ?? ''
+  const jobId = job?.id ?? upload?.jobId ?? null
+  // While the file is still being uploaded there is nothing to delete yet.
+  const settled = !upload || upload.stage === 'submitted' || upload.stage === 'error'
+  const dismissible = upload?.stage === 'rejected' || upload?.stage === 'limited'
+
   return (
-    <Card
-      name={current.originalName}
-      actions={<JobActions jobId={current.id} canDownload={current.status === 'done'} onDeleted={onDeleted} />}
-    >
-      <div className="flex items-center gap-3">
-        <Thumbnail job={current} />
-        <div className="flex min-w-0 flex-1 flex-col gap-2">
-          <JobState job={current} liveError={error} />
-        </div>
+    <article className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
+      <Thumbnail job={job} />
+      <div className="flex min-w-0 flex-1 flex-col gap-1.5">
+        <h3 className="min-w-0 truncate text-sm font-medium" title={name}>
+          {name}
+        </h3>
+        {job && (!upload || upload.stage === 'submitted') ? (
+          <JobState job={job} liveStopped={liveStopped} />
+        ) : upload ? (
+          <UploadState upload={upload} isAnonymous={isAnonymous} />
+        ) : null}
       </div>
-    </Card>
+      {jobId && settled ? (
+        <JobActions jobId={jobId} canDownload={job?.status === 'done'} onDeleted={onRemove} />
+      ) : dismissible ? (
+        <button type="button" className={BUTTON} onClick={onRemove}>
+          Dismiss
+        </button>
+      ) : null}
+    </article>
   )
 }

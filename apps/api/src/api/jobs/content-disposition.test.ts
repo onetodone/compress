@@ -1,25 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { contentDisposition, downloadFileName } from './content-disposition.js'
-
-describe('downloadFileName', () => {
-  it('keeps the name and uses the extension of the detected type', () => {
-    expect(downloadFileName('holiday.jpg', 'image/jpeg')).toBe('holiday.jpg')
-    expect(downloadFileName('holiday.JPEG', 'image/jpeg')).toBe('holiday.jpg')
-    expect(downloadFileName('scan.jpg', 'image/png')).toBe('scan.png')
-  })
-
-  it('replaces any known image extension', () => {
-    expect(downloadFileName('sticker.WEBP', 'image/webp')).toBe('sticker.webp')
-    expect(downloadFileName('scan.jfif', 'image/jpeg')).toBe('scan.jpg')
-    expect(downloadFileName('render.avif', 'image/avif')).toBe('render.avif')
-  })
-
-  it('appends the extension when the name has no image extension', () => {
-    expect(downloadFileName('logo', 'image/png')).toBe('logo.png')
-    expect(downloadFileName('report.v2', 'image/jpeg')).toBe('report.v2.jpg')
-  })
-})
+import { contentDisposition } from './content-disposition.js'
 
 describe('contentDisposition', () => {
   it('passes a plain ASCII name through', () => {

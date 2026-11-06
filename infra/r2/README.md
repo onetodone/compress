@@ -22,7 +22,7 @@ R2 → *Manage API tokens* → *Create Account API token*:
 
 ## CORS
 
-Browsers upload originals with a presigned `PUT` and download results with a presigned `GET`, so the bucket must allow both from the web origins, including the `Content-Type` header that the upload URL is signed with. Without this policy, uploads from the browser fail with a CORS error (`curl` is not affected).
+Browsers upload originals with a presigned `PUT` and read results with a presigned `GET`, so the bucket must allow both from the web origins, including the `Content-Type` header that the upload URL is signed with. `GET` is needed for more than links and `<img>`: "Download all" fetches every result with `fetch` to build a ZIP, which only works when the response carries `Access-Control-Allow-Origin`. Without this policy, uploads and "Download all" fail in the browser with a CORS error (`curl` is not affected).
 
 Bucket → *Settings* → *CORS Policy* → *Add CORS policy*, then paste the policy for the environment:
 

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { apiErrorMessage } from './api-error'
+import { apiError, apiErrorMessage, quotaLimitMessage } from './api-error'
 
 describe('apiErrorMessage', () => {
   it('explains the daily limit', () => {
@@ -27,5 +27,27 @@ describe('apiErrorMessage', () => {
       'Something went wrong. Try again.',
     )
     expect(apiErrorMessage(400, undefined)).toBe('Something went wrong. Try again.')
+  })
+})
+
+describe('apiError', () => {
+  it('keeps the limit of a refused job', () => {
+    expect(apiError(429, { code: 'network_daily_limit' }).quotaCode).toBe('network_daily_limit')
+    expect(apiError(429, { code: 'daily_limit' }).quotaCode).toBe('daily_limit')
+    expect(apiError(429, { code: 'something_else' }).quotaCode).toBe('daily_limit')
+  })
+
+  it('has no limit for other errors', () => {
+    expect(apiError(400, { message: 'Bad' })).toMatchObject({ status: 400, message: 'Bad', quotaCode: null })
+  })
+})
+
+describe('quotaLimitMessage', () => {
+  it('suggests signing in to anonymous users only', () => {
+    expect(quotaLimitMessage('daily_limit', true)).toBe('Daily limit reached. Sign in for more, or try again tomorrow.')
+    expect(quotaLimitMessage('daily_limit', false)).toBe('Daily limit reached. Try again tomorrow.')
+    expect(quotaLimitMessage('network_daily_limit', true)).toBe(
+      'Too many images from your network today. Sign in to continue.',
+    )
   })
 })

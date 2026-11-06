@@ -10,6 +10,7 @@
   },
   "dependencies": {
     "@onetodone/image-compressor-shared": "workspace:*",
+    "fflate": "^0.8.3",
     "firebase": "^13.0.0",
     "next": "16.4.2",
     "react": "^19.3.1",

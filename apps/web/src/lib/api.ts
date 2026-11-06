@@ -14,7 +14,7 @@ import {
 } from '@onetodone/image-compressor-shared'
 import { z } from 'zod'
 
-import { ApiError, apiErrorMessage } from './api-error'
+import { ApiError, apiError, apiErrorMessage } from './api-error'
 import { env } from './env'
 import { getFirebase } from './firebase'
 
@@ -35,7 +35,7 @@ async function request<S extends z.ZodType>(path: string, schema: S, init: Reque
     throw new ApiError(0, 'Cannot reach the server. Check your connection.')
   }
   const body: unknown = await response.json().catch(() => undefined)
-  if (!response.ok) throw new ApiError(response.status, apiErrorMessage(response.status, body))
+  if (!response.ok) throw apiError(response.status, body)
   return schema.parse(body)
 }
 

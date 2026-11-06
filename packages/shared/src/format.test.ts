@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest'
 
-import { defineImageFormats, imageFormats } from './format.js'
+import { defineImageFormats, downloadFileName, imageFormats } from './format.js'
 
 describe('imageFormats', () => {
   it('lists JPEG, PNG, WebP and AVIF', () => {
@@ -60,5 +60,24 @@ describe('defineImageFormats', () => {
 
   it('names a single format without a conjunction', () => {
     expect(defineImageFormats({ 'image/png': { name: 'PNG', extensions: ['png'] } }).names('and')).toBe('PNG')
+  })
+})
+
+describe('downloadFileName', () => {
+  it('keeps the name and uses the extension of the detected type', () => {
+    expect(downloadFileName('holiday.jpg', 'image/jpeg')).toBe('holiday.jpg')
+    expect(downloadFileName('holiday.JPEG', 'image/jpeg')).toBe('holiday.jpg')
+    expect(downloadFileName('scan.jpg', 'image/png')).toBe('scan.png')
+  })
+
+  it('replaces any known image extension', () => {
+    expect(downloadFileName('sticker.WEBP', 'image/webp')).toBe('sticker.webp')
+    expect(downloadFileName('scan.jfif', 'image/jpeg')).toBe('scan.jpg')
+    expect(downloadFileName('render.avif', 'image/avif')).toBe('render.avif')
+  })
+
+  it('appends the extension when the name has no image extension', () => {
+    expect(downloadFileName('logo', 'image/png')).toBe('logo.png')
+    expect(downloadFileName('report.v2', 'image/jpeg')).toBe('report.v2.jpg')
   })
 })
