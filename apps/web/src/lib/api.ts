@@ -1,4 +1,6 @@
 import {
+  type CreateLinkCodeResponse,
+  createLinkCodeResponseSchema,
   type CreateJobRequest,
   type CreateJobResponse,
   createJobResponseSchema,
@@ -11,6 +13,8 @@ import {
   meResponseSchema,
   type SubmitJobResponse,
   submitJobResponseSchema,
+  type TelegramLoginResponse,
+  telegramLoginResponseSchema,
 } from '@onetodone/image-compressor-shared'
 import { z } from 'zod'
 
@@ -26,6 +30,11 @@ async function request<S extends z.ZodType>(path: string, schema: S, init: Reque
 
   const headers = new Headers(init.headers)
   headers.set('Authorization', `Bearer ${await user.getIdToken()}`)
+  return send(path, schema, { ...init, headers })
+}
+
+async function send<S extends z.ZodType>(path: string, schema: S, init: RequestInit = {}): Promise<z.output<S>> {
+  const headers = new Headers(init.headers)
   if (init.body !== undefined) headers.set('Content-Type', 'application/json')
 
   let response: Response
@@ -76,5 +85,20 @@ export const api = {
   /** Deletes a job together with its files. */
   async deleteJob(jobId: string): Promise<void> {
     await request(`/jobs/${encodeURIComponent(jobId)}`, z.undefined(), { method: 'DELETE' })
+  },
+
+  /** Creates a one-time Telegram link that connects the Telegram account opening it to this user. */
+  createTelegramLinkCode(): Promise<CreateLinkCodeResponse> {
+    return request('/auth/telegram/link-code', createLinkCodeResponseSchema, { method: 'POST' })
+  },
+
+  /** Exchanges a login code from the Telegram bot for a Firebase custom token; needs no session. */
+  telegramLogin(code: string): Promise<TelegramLoginResponse> {
+    return send('/auth/telegram', telegramLoginResponseSchema, { method: 'POST', body: JSON.stringify({ code }) })
+  },
+
+  /** Disconnects the linked Telegram account; the user needs Google to sign in afterwards. */
+  async unlinkTelegram(): Promise<void> {
+    await request('/auth/telegram', z.undefined(), { method: 'DELETE' })
   },
 }
