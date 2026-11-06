@@ -1,10 +1,8 @@
-import type { InputType } from '@onetodone/image-compressor-shared'
+import { type ImageType, imageFormats } from '@onetodone/image-compressor-shared'
 
-import { fileExtension } from '../../common/r2/object-keys.js'
-
-/** Name of the downloaded result: the original name with the extension of the detected type. */
-export function downloadFileName(originalName: string, type: InputType): string {
-  return `${originalName.replace(/\.(?:jpe?g|png)$/i, '')}.${fileExtension(type)}`
+/** Name of the downloaded result: the original name with any image extension replaced by that of the result type. */
+export function downloadFileName(originalName: string, type: ImageType): string {
+  return `${imageFormats.stripExtension(originalName)}.${imageFormats.extension(type)}`
 }
 
 /**
