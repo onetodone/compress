@@ -49,7 +49,7 @@ export class TelegramPoller implements OnApplicationBootstrap, OnModuleDestroy {
         this.handlers.callback({
           chatId: message.chat.id,
           messageId: message.message_id,
-          from: { id: ctx.from.id, firstName: ctx.from.first_name },
+          from: { id: ctx.from.id },
           callbackId: ctx.callbackQuery.id,
           data: ctx.callbackQuery.data,
         }),
@@ -106,6 +106,6 @@ function messageOf(ctx: Context & { message: { message_id: number; chat: { id: n
   return {
     chatId: ctx.message.chat.id,
     messageId: ctx.message.message_id,
-    from: { id: ctx.from!.id, firstName: ctx.from!.first_name },
+    from: { id: ctx.from!.id },
   }
 }
