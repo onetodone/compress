@@ -3,6 +3,7 @@ import {
   type CreateJobRequest,
   type CreateJobResponse,
   DOWNLOAD_URL_TTL_SECONDS,
+  formatBytes,
   downloadFileName,
   type DownloadJobQuery,
   type DownloadJobResponse,
@@ -12,7 +13,6 @@ import {
   jobIdSchema,
   type ListJobsQuery,
   type ListJobsResponse,
-  MAX_INPUT_BYTES,
   type SubmitJobResponse,
   toJobSummary,
   UPLOAD_URL_TTL_SECONDS,
@@ -25,7 +25,7 @@ import { CallTimer } from '../../common/logging/call-timer.js'
 import { originalKey } from '../../common/r2/object-keys.js'
 import { ObjectStorage } from '../../common/r2/object-storage.js'
 import { TaskQueue } from '../../common/tasks/task-queue.js'
-import type { AuthUser } from '../auth/auth-user.js'
+import type { AuthUser } from '../../common/auth/auth-user.js'
 import { QuotaService } from '../users/quota.service.js'
 import { contentDisposition } from './content-disposition.js'
 import { decodeJobCursor, encodeJobCursor } from './job-cursor.js'
@@ -76,6 +76,8 @@ export class JobsService {
 
   /** @param ip client address, for the per-network limit on anonymous jobs */
   async create(user: AuthUser, ip: string | undefined, request: CreateJobRequest): Promise<CreateJobResponse> {
+    const { maxInputBytes } = this.quota.entitlements(user)
+    if (request.size > maxInputBytes) throw new BadRequestException(tooLarge(maxInputBytes))
     // Quota is consumed on submit; checking it here only saves an upload that could never be submitted.
     await this.quota.assertAvailable(user, ip)
 
@@ -133,6 +135,7 @@ export class JobsService {
       const inputBytes = await this.verifyUpload(
         snapshot.get('inputKey') as string,
         snapshot.get('inputType') as string,
+        this.quota.entitlements(user).maxInputBytes,
       )
       const reservation = await this.quota.reserveNetwork(user, ip)
       let consumed = false
@@ -206,13 +209,12 @@ export class JobsService {
   }
 
   /** Returns the size of the uploaded original after checking it against the job. */
-  private async verifyUpload(key: string, declaredType: string): Promise<number> {
+  private async verifyUpload(key: string, declaredType: string, maxInputBytes: number): Promise<number> {
     const object = await this.storage.head(key)
     if (!object) throw new ConflictException('The file has not been uploaded')
     // The presigned URL binds type and size, so a mismatch means the object did not come from it.
-    if (object.size === 0 || object.size > MAX_INPUT_BYTES) {
-      throw new BadRequestException('The file must be between 1 byte and 10 MB')
-    }
+    if (object.size === 0) throw new BadRequestException('The file is empty')
+    if (object.size > maxInputBytes) throw new BadRequestException(tooLarge(maxInputBytes))
     if (object.contentType !== declaredType) throw new BadRequestException('The file type does not match the job')
     return object.size
   }
@@ -221,4 +223,8 @@ export class JobsService {
     if (!jobIdSchema.safeParse(jobId).success) throw new NotFoundException('Job not found')
     return this.firestore.collection(JOBS).doc(jobId)
   }
+}
+
+function tooLarge(maxInputBytes: number): string {
+  return `The file must be at most ${formatBytes(maxInputBytes)}`
 }

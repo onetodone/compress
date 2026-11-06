@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
-import { meResponseSchema } from '@onetodone/image-compressor-shared'
+import { MAX_INPUT_BYTES, meResponseSchema } from '@onetodone/image-compressor-shared'
 import { Firestore } from 'firebase-admin/firestore'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -42,8 +42,10 @@ describe('GET /me', () => {
 
     expect(meResponseSchema.parse(response.body)).toEqual({
       uid,
+      kind: 'anonymous',
       isAnonymous: true,
       quota: { dayKey: expect.any(String), used: 0, limit: 5 },
+      limits: { maxInputBytes: MAX_INPUT_BYTES },
       networkLimitReached: false,
     })
   })
@@ -53,7 +55,13 @@ describe('GET /me', () => {
 
     const response = await request(app.getHttpServer()).get('/me').set('Authorization', `Bearer ${token}`).expect(200)
 
-    expect(response.body).toMatchObject({ uid, isAnonymous: false, quota: { used: 0, limit: 30 } })
+    expect(response.body).toMatchObject({
+      uid,
+      kind: 'registered',
+      isAnonymous: false,
+      quota: { used: 0, limit: 30 },
+      limits: { maxInputBytes: MAX_INPUT_BYTES },
+    })
   })
 
   it('keeps the uid and used quota and raises the limit when an anonymous user links Google', async () => {
@@ -61,7 +69,7 @@ describe('GET /me', () => {
     const firestore = app.get(Firestore)
     const quota = app.get(QuotaService)
     for (let i = 0; i < 5; i++) {
-      await firestore.runTransaction((tx) => quota.consume(tx, { uid: anonymous.uid, isAnonymous: true }))
+      await firestore.runTransaction((tx) => quota.consume(tx, { uid: anonymous.uid, kind: 'anonymous' }))
     }
 
     const linked = await linkWithGoogle(anonymous.token)
@@ -71,7 +79,12 @@ describe('GET /me', () => {
       .get('/me')
       .set('Authorization', `Bearer ${linked.token}`)
       .expect(200)
-    expect(response.body).toMatchObject({ uid: anonymous.uid, isAnonymous: false, quota: { used: 5, limit: 30 } })
+    expect(response.body).toMatchObject({
+      uid: anonymous.uid,
+      kind: 'registered',
+      isAnonymous: false,
+      quota: { used: 5, limit: 30 },
+    })
   })
 
   it('keeps health checks public', async () => {
