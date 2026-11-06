@@ -14,6 +14,8 @@ export const WORKING_REACTION = '👀'
 export const BOT_COMMANDS = [
   { command: 'my_images', description: 'Your images of the last 7 days' },
   { command: 'quota', description: 'Images left today' },
+  { command: 'login', description: 'Sign in on the website' },
+  { command: 'unlink', description: 'Disconnect from the website account' },
   { command: 'help', description: 'How it works' },
   { command: 'start', description: 'Start the bot' },
 ] as const
@@ -47,6 +49,7 @@ export function startText(): string {
     '',
     `/my_images — your images of the last ${LIFETIME_DAYS} days`,
     '/quota — images left today',
+    '/login — sign in on the website with this Telegram account',
     '/help — how it works',
   ].join('\n')
 }
@@ -62,6 +65,8 @@ export function helpText({ dailyJobs, maxInputBytes }: LimitsInfo): string {
     '',
     `/my_images lists your images of the last ${LIFETIME_DAYS} days, to download or delete them. Images are deleted automatically after ${LIFETIME_DAYS} days.`,
     'Deleting an image removes it from the service; files already sent to this chat stay here.',
+    '',
+    'The website and this bot share one account: /login signs you in on the website, and "Connect Telegram" on the website links this chat to an account you already have there. /unlink disconnects them again.',
   ].join('\n')
 }
 
@@ -213,3 +218,89 @@ function untilNextUtcDay(now: Date): string {
 function shorten(name: string): string {
   return name.length <= BUTTON_NAME_LENGTH ? name : `${name.slice(0, BUTTON_NAME_LENGTH - 1)}…`
 }
+
+/** Reply to a website link whose code is unknown, used or expired. */
+export const LINK_EXPIRED_TEXT =
+  'This link has expired or was already used. Open "Connect Telegram" on the website again for a new one.'
+
+/** Reply when this Telegram account was connected to a website account. */
+export const LINKED_TEXT =
+  'Done: this Telegram account is connected to your website account. Images you send here appear on the website too, and the daily limit is shared.'
+
+/** Reply when this Telegram account was already connected to that website account. */
+export const ALREADY_LINKED_TEXT = 'This Telegram account is already connected to that website account.'
+
+/**
+ * Question before this Telegram account is connected to a website account.
+ * @param label how to name the website account, e.g. its email
+ * @param images jobs of the account the Telegram account leaves
+ */
+export function linkQuestion(label: string | null, images: number, code: string): BotMessage {
+  const count = `${images} ${images === 1 ? 'image' : 'images'}`
+  const lines = [
+    label
+      ? `Connect this Telegram account to the website account ${label}?`
+      : 'Connect this Telegram account to the website account?',
+    'Images you send here will appear on the website, and the daily limit is shared. Only connect your own account.',
+  ]
+  if (images > 0) {
+    lines.push(
+      '',
+      `The ${count} you have here stay with the current account and are no longer listed after connecting.`,
+    )
+  }
+  return {
+    text: lines.join('\n'),
+    keyboard: [
+      [
+        { text: 'Connect', data: encodeCallback({ type: 'link', code }) },
+        { text: 'Cancel', data: encodeCallback({ type: 'cancel' }) },
+      ],
+    ],
+  }
+}
+
+/** Reply to `/login` when the bot does not know the website's address. */
+export const LOGIN_UNAVAILABLE_TEXT = 'Signing in on the website is not available right now.'
+
+/**
+ * Answer to `/login`: a one-time link that signs in on the website. Telegram accepts only HTTPS
+ * links on buttons, so other addresses (local development) are given as text only.
+ */
+export function loginMessage(url: string, validMinutes: number): BotMessage {
+  const text = [
+    'Open this link to sign in on the website with this Telegram account. It works once, within ' +
+      `${validMinutes} minutes. Do not share it: whoever opens it gets into your account.`,
+    '',
+    url,
+  ].join('\n')
+  if (!url.startsWith('https://')) return { text }
+  return { text, keyboard: [[{ text: 'Sign in on the website', url }]] }
+}
+
+/** Reply to `/unlink` when Telegram is the only way into the account. */
+export const UNLINK_REFUSED_TEXT =
+  'This Telegram account is the only way to sign in to your account, so it cannot be disconnected. Sign in on the website with /login and link Google there first.'
+
+/** Question before this Telegram account is disconnected from its account. */
+export function unlinkQuestion(): BotMessage {
+  return {
+    text: [
+      'Disconnect this Telegram account from your account?',
+      'Your images stay with the account and remain available on the website when you sign in with Google. Images you send here afterwards go to a new, separate account.',
+    ].join('\n'),
+    keyboard: [
+      [
+        { text: 'Disconnect', data: encodeCallback({ type: 'unlink' }) },
+        { text: 'Cancel', data: encodeCallback({ type: 'cancel' }) },
+      ],
+    ],
+  }
+}
+
+/** Reply when this Telegram account was disconnected. */
+export const UNLINKED_TEXT =
+  'Disconnected. Images you send now go to a new, separate account; the earlier ones stay available on the website.'
+
+/** Reply to a cancelled question. */
+export const CANCELLED_TEXT = 'Cancelled.'

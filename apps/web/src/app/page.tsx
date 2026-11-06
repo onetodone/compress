@@ -15,6 +15,7 @@ import { JobCard } from '@/components/job-card'
 import { ListToolbar, type UploadTotals } from '@/components/list-toolbar'
 import { PresetPicker } from '@/components/preset-picker'
 import { QuotaMeter } from '@/components/quota-meter'
+import { TelegramLoginNotice } from '@/components/telegram-login-notice'
 import { type SessionUser, useAuthUser } from '@/hooks/use-auth-user'
 import { useJobHistory } from '@/hooks/use-job-history'
 import { type LiveJobEntry, useLiveJobs } from '@/hooks/use-live-jobs'
@@ -23,7 +24,15 @@ import { type Upload, useUploads } from '@/hooks/use-uploads'
 import { quotaLimitMessage } from '@/lib/api-error'
 
 export default function HomePage() {
-  const { user, error: authError, signInWithGoogle, signOut } = useAuthUser()
+  const {
+    user,
+    error: authError,
+    telegramLogin,
+    signInWithGoogle,
+    signOut,
+    confirmTelegramLogin,
+    dismissTelegramLogin,
+  } = useAuthUser()
 
   return (
     <main className="mx-auto flex min-h-screen max-w-3xl flex-col gap-8 px-4 py-10 sm:py-16">
@@ -36,6 +45,15 @@ export default function HomePage() {
         </div>
         {user && <AccountControl user={user} signInWithGoogle={signInWithGoogle} signOut={signOut} />}
       </header>
+
+      {telegramLogin && (
+        <TelegramLoginNotice
+          state={telegramLogin}
+          currentName={user?.name ?? null}
+          onConfirm={confirmTelegramLogin}
+          onDismiss={dismissTelegramLogin}
+        />
+      )}
 
       {authError ? (
         <p

@@ -4,6 +4,8 @@ import type { AccountKind } from '@onetodone/image-compressor-shared'
 export interface AuthUser {
   uid: string
   kind: AccountKind
+  /** Email of the verified ID token, when it has one (e.g. a Google sign-in). */
+  email?: string
 }
 
 /**

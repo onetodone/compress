@@ -2,8 +2,19 @@ import type { JobSummary, Quota } from '@onetodone/image-compressor-shared'
 import { describe, expect, it } from 'vitest'
 
 import { JOB_LIFETIME_MS } from '../common/jobs/job-lifetime.js'
-import { failureText, helpText, imagesPage, quotaText, resultCaption } from './bot-messages.js'
+import {
+  failureText,
+  helpText,
+  imagesPage,
+  linkQuestion,
+  loginMessage,
+  quotaText,
+  resultCaption,
+} from './bot-messages.js'
 import { parseCallback } from './callback-data.js'
+import type { InlineButton } from './chat-gateway.js'
+
+const dataOf = (button: InlineButton) => ('data' in button ? button.data : '')
 
 const NOW = new Date('2026-11-06T18:30:00Z')
 const quota: Quota = { dayKey: '2026-11-06', used: 3, limit: 30 }
@@ -62,6 +73,33 @@ describe('bot messages', () => {
     expect(failureText(failed, false)).toBe('Could not compress photo.jpg. The file is not a valid image.')
   })
 
+  describe('account links', () => {
+    it('puts an HTTPS login link on a button', () => {
+      const url = 'https://img.example.com/#telegram-login=Ab-_0123456789abcdefgh'
+      const { text, keyboard } = loginMessage(url, 10)
+
+      expect(text).toContain(url)
+      expect(text).toContain('within 10 minutes')
+      expect(keyboard).toEqual([[{ text: 'Sign in on the website', url }]])
+    })
+
+    it('gives a login link that Telegram would refuse on a button as text only', () => {
+      const url = 'http://localhost:3000/#telegram-login=Ab-_0123456789abcdefgh'
+
+      expect(loginMessage(url, 10)).toEqual({ text: expect.stringContaining(url) as string })
+    })
+
+    it('names the website account and mentions images left behind', () => {
+      const code = 'Ab-_0123456789abcdefgh'
+      const { text, keyboard } = linkQuestion('ada@example.com', 1, code)
+
+      expect(text).toContain('to the website account ada@example.com?')
+      expect(text).toContain('The 1 image you have here stay')
+      expect(parseCallback(dataOf(keyboard![0]![0]!))).toEqual({ type: 'link', code })
+      expect(parseCallback(dataOf(keyboard![0]![1]!))).toEqual({ type: 'cancel' })
+    })
+  })
+
   describe('images page', () => {
     it('numbers jobs across pages and offers downloads only for finished ones', () => {
       const jobs = [job(), job({ id: 'b1B2c3D4e5F6g7H8i9J0', status: 'processing', originalName: 'scan.png' })]
@@ -80,8 +118,8 @@ describe('bot messages', () => {
         ['🗑 7. scan.png'],
         ['‹ Newer', '↻ Refresh'],
       ])
-      expect(parseCallback(keyboard![0]![0]!.data)).toEqual({ type: 'download', jobId: jobs[0]!.id })
-      expect(parseCallback(keyboard![1]![0]!.data)).toEqual({ type: 'askDelete', jobId: jobs[1]!.id, page: 1 })
+      expect(parseCallback(dataOf(keyboard![0]![0]!))).toEqual({ type: 'download', jobId: jobs[0]!.id })
+      expect(parseCallback(dataOf(keyboard![1]![0]!))).toEqual({ type: 'askDelete', jobId: jobs[1]!.id, page: 1 })
     })
 
     it('counts down the hours of a result about to be deleted', () => {

@@ -6,6 +6,7 @@ import {
   signOut as firebaseSignOut,
   signInWithCredential,
   signInWithPopup,
+  type User,
 } from 'firebase/auth'
 
 /**
@@ -35,23 +36,30 @@ export function signInErrorMessage(code: string): string | null {
   return 'Could not sign in. Try again.'
 }
 
+const GOOGLE_PROVIDER = GoogleAuthProvider.PROVIDER_ID
+
 function googleProvider(): GoogleAuthProvider {
   const provider = new GoogleAuthProvider()
   provider.setCustomParameters({ prompt: 'select_account' })
   return provider
 }
 
+/** Whether a Firebase user can sign in with Google. */
+export function hasGoogle(user: User): boolean {
+  return user.providerData.some((provider) => provider.providerId === GOOGLE_PROVIDER)
+}
+
 /**
- * Signs in with Google. An anonymous user is linked, so uid, history and quota stay the same. When
- * the Google account already belongs to another user, signs in to that user instead and leaves the
- * anonymous session behind.
+ * Signs in with Google. A user without Google (anonymous, or signed in through Telegram) is linked,
+ * so uid, history and quota stay the same. When the Google account already belongs to another user,
+ * signs in to that user instead and leaves the current session behind.
  *
  * @throws SignInError when sign-in fails for a reason other than the user closing the popup
  */
 export async function signInWithGoogle(auth: Auth): Promise<GoogleSignInOutcome> {
   const user = auth.currentUser
   try {
-    if (user?.isAnonymous) {
+    if (user && !hasGoogle(user)) {
       await linkWithPopup(user, googleProvider())
       // The API reads the sign-in provider from the token, so the next request must carry a fresh one.
       await user.getIdToken(true)

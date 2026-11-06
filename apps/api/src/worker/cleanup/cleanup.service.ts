@@ -9,6 +9,7 @@ import {
   Timestamp,
 } from 'firebase-admin/firestore'
 
+import { LINK_CODES } from '../../common/accounts/link-codes.js'
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
 import type { WorkerConfig } from '../../common/config/config.js'
 import { CONFIG } from '../../common/config/config.module.js'
@@ -35,6 +36,8 @@ export interface CleanupResult {
   stuckJobs: number
   /** Jobs past the result lifetime, deleted with their files. */
   expiredJobs: number
+  /** One-time link and login codes past their expiry, deleted. */
+  expiredLinkCodes: number
   /** Jobs that could not be handled; they are tried again in the next run. */
   errors: number
 }
@@ -61,7 +64,7 @@ export class CleanupService {
   async run(now = new Date()): Promise<CleanupResult> {
     const cutoffs = staleJobCutoffs(now, this.config)
     const jobs = this.firestore.collection(JOBS)
-    const result: CleanupResult = { abandonedUploads: 0, stuckJobs: 0, expiredJobs: 0, errors: 0 }
+    const result: CleanupResult = { abandonedUploads: 0, stuckJobs: 0, expiredJobs: 0, expiredLinkCodes: 0, errors: 0 }
 
     // Both status queries need the composite index on (status, updatedAt).
     const abandoned = jobs
@@ -95,6 +98,13 @@ export class CleanupService {
     const expired = jobs.where('createdAt', '<', Timestamp.fromDate(cutoffs.expired))
     await this.each('jobs.expired', expired, result, async (job) => {
       if (await this.deleteJob(job, (current) => current.exists)) result.expiredJobs++
+    })
+
+    // A code is used by deleting it in a transaction, so deleting an expired one races nothing.
+    const codes = this.firestore.collection(LINK_CODES).where('expiresAt', '<', Timestamp.fromDate(now))
+    await this.each('linkCodes.expired', codes, result, async (code) => {
+      await this.timer.measure('firestore', 'linkCodes.delete', () => code.ref.delete())
+      result.expiredLinkCodes++
     })
 
     return result

@@ -55,6 +55,21 @@ export async function linkWithGoogle(token: string): Promise<{ token: string; ui
   return { token: json.idToken, uid: json.localId }
 }
 
+/**
+ * Signs in with a Firebase custom token, as `signInWithCustomToken` does in the browser; the first
+ * sign-in creates the Auth user. Returns the user's ID token and uid.
+ */
+export async function signInWithCustomToken(customToken: string): Promise<{ token: string; uid: string }> {
+  const url = `${emulatorUrl('FIREBASE_AUTH_EMULATOR_HOST')}/identitytoolkit.googleapis.com/v1/accounts:signInWithCustomToken?key=test`
+  const json = (await call(url, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ token: customToken, returnSecureToken: true }),
+  })) as { idToken: string; localId?: string }
+  const payload = JSON.parse(Buffer.from(json.idToken.split('.')[1]!, 'base64url').toString()) as { user_id: string }
+  return { token: json.idToken, uid: payload.user_id }
+}
+
 /** Deletes every document in the Firestore emulator. */
 export async function clearFirestore(): Promise<void> {
   const url = `${emulatorUrl('FIRESTORE_EMULATOR_HOST')}/emulator/v1/projects/${PROJECT_ID}/databases/(default)/documents`

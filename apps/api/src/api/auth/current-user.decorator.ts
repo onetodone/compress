@@ -9,3 +9,9 @@ export const CurrentUser = createParamDecorator((_data: unknown, context: Execut
   if (!user) throw new Error('CurrentUser used on a route without authentication')
   return user
 })
+
+/** Injects whether the authenticated user has a Google sign-in, according to the verified ID token. */
+export const GoogleLinked = createParamDecorator((_data: unknown, context: ExecutionContext): boolean => {
+  const { linkedProviders } = context.switchToHttp().getRequest<AuthenticatedRequest>()
+  return linkedProviders?.includes('google.com') ?? false
+})

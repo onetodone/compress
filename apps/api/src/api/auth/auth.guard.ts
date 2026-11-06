@@ -31,6 +31,8 @@ export class AuthGuard implements CanActivate {
 
     const decoded = await this.verify(token)
     request.user = { uid: decoded.uid, kind: accountKindOf(decoded.firebase.sign_in_provider) }
+    if (decoded.email) request.user.email = decoded.email
+    request.linkedProviders = Object.keys(decoded.firebase.identities ?? {})
     return true
   }
 

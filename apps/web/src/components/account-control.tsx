@@ -2,6 +2,7 @@
 
 import { useState } from 'react'
 
+import { TelegramLink } from '@/components/telegram-link'
 import type { AuthState, SessionUser } from '@/hooks/use-auth-user'
 import { SignInError } from '@/lib/account'
 
@@ -47,6 +48,16 @@ export function AccountControl({ user, signInWithGoogle, signOut }: AccountContr
       ) : (
         <div className="flex flex-wrap items-center justify-end gap-2">
           {user.name && <span className="max-w-56 truncate text-zinc-600 dark:text-zinc-400">{user.name}</span>}
+          {!user.hasGoogle && (
+            <button
+              type="button"
+              disabled={busy}
+              onClick={() => void run(signInWithGoogle, 'Could not link Google. Try again.')}
+              className={BUTTON}
+            >
+              Link Google
+            </button>
+          )}
           <button
             type="button"
             disabled={busy}
@@ -62,6 +73,7 @@ export function AccountControl({ user, signInWithGoogle, signOut }: AccountContr
           {error}
         </p>
       )}
+      {user.kind === 'registered' && <TelegramLink uid={user.uid} hasGoogle={user.hasGoogle} />}
     </div>
   )
 }

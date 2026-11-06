@@ -13,6 +13,7 @@ import { R2Module } from '../common/r2/r2.module.js'
 import { TasksModule } from '../common/tasks/tasks.module.js'
 import { AuthModule } from './auth/auth.module.js'
 import { JobsModule } from './jobs/jobs.module.js'
+import { TelegramLinkModule } from './telegram/telegram-link.module.js'
 import { UsersModule } from './users/users.module.js'
 
 @Module({})
@@ -32,6 +33,7 @@ export class ApiModule {
         QuotaModule.register(config),
         UsersModule,
         JobsModule,
+        TelegramLinkModule,
       ],
     }
   }

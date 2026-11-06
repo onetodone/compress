@@ -127,6 +127,12 @@ function replyTo(messageId: number | undefined) {
 function keyboard(rows: InlineKeyboard | undefined) {
   if (!rows) return {}
   return {
-    reply_markup: { inline_keyboard: rows.map((row) => row.map(({ text, data }) => ({ text, callback_data: data }))) },
+    reply_markup: {
+      inline_keyboard: rows.map((row) =>
+        row.map((button) =>
+          'url' in button ? { text: button.text, url: button.url } : { text: button.text, callback_data: button.data },
+        ),
+      ),
+    },
   }
 }

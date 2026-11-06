@@ -14,5 +14,14 @@ service cloud.firestore {
       allow read: if request.auth != null && uid == request.auth.uid;
       allow write: if false;
     }
+
+    // Telegram identities and one-time codes are server-only: a readable code would sign in as its user.
+    match /identities/{id} {
+      allow read, write: if false;
+    }
+
+    match /linkCodes/{id} {
+      allow read, write: if false;
+    }
   }
 }

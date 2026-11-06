@@ -3,6 +3,7 @@ import { type DynamicModule, Module } from '@nestjs/common'
 import type { NestExpressApplication } from '@nestjs/platform-express'
 import { Bot } from 'grammy'
 
+import { AccountsModule } from '../common/accounts/accounts.module.js'
 import { createApp } from '../common/bootstrap.js'
 import { CloudinaryModule } from '../common/cloudinary/cloudinary.module.js'
 import type { BotConfig } from '../common/config/config.js'
@@ -20,7 +21,6 @@ import { ChatGateway } from './chat-gateway.js'
 import { NotificationConsumer } from './notifications/notification.consumer.js'
 import { NotificationService } from './notifications/notification.service.js'
 import { TelegramChatGateway } from './telegram-chat-gateway.js'
-import { TelegramIdentityService } from './telegram-identity.service.js'
 import { TELEGRAM_BOT, TelegramPoller } from './telegram-poller.js'
 
 /** The Telegram bot: answers users by long polling and delivers finished jobs from the notification queue. */
@@ -38,6 +38,7 @@ export class BotModule {
         TasksModule.register(config),
         QuotaModule.register(config),
         HealthModule,
+        AccountsModule,
       ],
       providers: [
         {
@@ -56,7 +57,6 @@ export class BotModule {
           inject: [TELEGRAM_BOT, CallTimer],
         },
         JobsService,
-        TelegramIdentityService,
         BotService,
         NotificationService,
         NotificationConsumer,

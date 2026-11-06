@@ -1,9 +1,15 @@
-/** A button under a message that sends `data` back to the bot when pressed. */
-export interface InlineButton {
-  text: string
-  /** Callback data, at most 64 bytes. */
-  data: string
-}
+/** A button under a message: it sends `data` back to the bot, or opens `url`, when pressed. */
+export type InlineButton =
+  | {
+      text: string
+      /** Callback data, at most 64 bytes. */
+      data: string
+    }
+  | {
+      text: string
+      /** HTTPS link the button opens. */
+      url: string
+    }
 
 /** Rows of buttons under a message. */
 export type InlineKeyboard = InlineButton[][]
