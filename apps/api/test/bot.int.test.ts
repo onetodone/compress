@@ -53,7 +53,7 @@ describe('telegram bot', () => {
     tasks.reset()
   })
 
-  const from = { id: TELEGRAM_ID, firstName: 'Ann' }
+  const from = { id: TELEGRAM_ID }
   const message = (messageId = MESSAGE_ID) => ({ chatId: CHAT_ID, messageId, from })
 
   function document(fields: Partial<IncomingDocument> = {}): IncomingDocument {
@@ -112,11 +112,12 @@ describe('telegram bot', () => {
   }
 
   describe('files', () => {
-    it('creates a registered user and submits a job that remembers the message to answer', async () => {
+    it('creates a registered user without an Auth account and submits a job that remembers the message', async () => {
       await bot.document(document())
 
       const owner = await uid()
-      expect((await auth.getUser(owner)).displayName).toBe('Ann')
+      // The server's credentials only reach Firestore; the Auth user comes with the first web sign-in.
+      expect((await auth.listUsers()).users).toEqual([])
       const [job] = await jobs()
       expect(job?.data()).toMatchObject({
         ownerId: owner,
@@ -144,7 +145,6 @@ describe('telegram bot', () => {
 
       const owners = new Set((await jobs()).map((job) => job.get('ownerId') as string))
       expect([...owners]).toEqual([await uid()])
-      expect((await auth.listUsers()).users.map((user) => user.uid)).toEqual([await uid()])
     })
 
     it('creates one user when two messages of a new account arrive at once', async () => {
@@ -152,9 +152,7 @@ describe('telegram bot', () => {
 
       const owners = new Set((await jobs()).map((job) => job.get('ownerId') as string))
       expect(owners.size).toBe(1)
-      const owner = [...owners][0]!
-      await expect(auth.getUser(owner)).resolves.toBeDefined()
-      expect((await auth.listUsers()).users.length).toBe(1)
+      expect([...owners]).toEqual([await uid()])
     })
 
     it('reads the type from the extension when Telegram does not know it', async () => {
