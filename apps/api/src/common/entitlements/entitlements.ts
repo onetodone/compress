@@ -1,4 +1,4 @@
-import { MAX_INPUT_BYTES } from '@onetodone/image-compressor-shared'
+import { MAX_INPUT_BYTES } from '@onetodone/compress-shared'
 
 import type { AuthUser } from '../auth/auth-user.js'
 import type { QuotaConfig } from '../config/config.js'

@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
-import { utcDayKey } from '@onetodone/image-compressor-shared'
+import { utcDayKey } from '@onetodone/compress-shared'
 import { Queue } from 'bullmq'
 import { Firestore, Timestamp } from 'firebase-admin/firestore'
 import { Redis } from 'ioredis'

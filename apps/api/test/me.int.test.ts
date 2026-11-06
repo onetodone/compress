@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
-import { MAX_INPUT_BYTES, meResponseSchema } from '@onetodone/image-compressor-shared'
+import { MAX_INPUT_BYTES, meResponseSchema } from '@onetodone/compress-shared'
 import { Firestore } from 'firebase-admin/firestore'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'

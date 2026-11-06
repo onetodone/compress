@@ -15,7 +15,7 @@ import {
   submitJobResponseSchema,
   type TelegramLoginResponse,
   telegramLoginResponseSchema,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 import { z } from 'zod'
 
 import { ApiError, apiError, apiErrorMessage } from './api-error'

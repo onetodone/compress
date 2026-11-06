@@ -8,7 +8,7 @@ import type {
   WorkerConfig,
 } from '../../src/common/config/config.js'
 
-export const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'demo-image-compressor-test'
+export const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'demo-onetodone-compress-test'
 
 const baseConfig: BaseConfig = {
   NODE_ENV: 'test',
@@ -27,7 +27,7 @@ const r2Config: R2Config = {
 
 const cloudinaryConfig: CloudinaryConfig = {
   CLOUDINARY_URL: 'cloudinary://123:test-secret@test-cloud',
-  CLOUDINARY_FOLDER: 'image-compressor-test',
+  CLOUDINARY_FOLDER: 'onetodone-compress-test',
 }
 
 /** Redis database used by tests only; flushed by the tests, so never the development database. */
@@ -35,7 +35,7 @@ export const TEST_REDIS_URL = process.env.TEST_REDIS_URL ?? 'redis://127.0.0.1:6
 
 export const queueConfig: QueueConfig = {
   REDIS_URL: TEST_REDIS_URL,
-  QUEUE_PREFIX: 'image-compressor-test',
+  QUEUE_PREFIX: 'onetodone-compress-test',
   QUEUE_MAX_ATTEMPTS: 3,
   QUEUE_BACKOFF_MS: 10,
 }

@@ -238,7 +238,7 @@ importers:
       '@nestjs/platform-express':
         specifier: ^12.2.0
         version: 12.2.0(@nestjs/common@12.2.0(reflect-metadata@0.2.2)(rxjs@7.8.2)(supports-color@7.2.0))(@nestjs/core@12.2.0)(supports-color@7.2.0)
-      '@onetodone/image-compressor-shared':
+      '@onetodone/compress-shared':
         specifier: workspace:*
         version: link:../../packages/shared
       bullmq:
@@ -305,7 +305,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@onetodone/image-compressor-shared':
+      '@onetodone/compress-shared':
         specifier: workspace:*
         version: link:../../packages/shared
       fflate:

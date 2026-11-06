@@ -1,6 +1,6 @@
 'use client'
 
-import type { TelegramStatus } from '@onetodone/image-compressor-shared'
+import type { TelegramStatus } from '@onetodone/compress-shared'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useCallback, useEffect, useState } from 'react'
 

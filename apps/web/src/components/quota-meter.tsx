@@ -1,4 +1,4 @@
-import type { Quota } from '@onetodone/image-compressor-shared'
+import type { Quota } from '@onetodone/compress-shared'
 
 /** @param exhausted no jobs are left for another reason, e.g. the network limit */
 export function QuotaMeter({ quota, exhausted = false }: { quota: Quota; exhausted?: boolean }) {

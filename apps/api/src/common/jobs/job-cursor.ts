@@ -1,4 +1,4 @@
-import { jobIdSchema } from '@onetodone/image-compressor-shared'
+import { jobIdSchema } from '@onetodone/compress-shared'
 import { Timestamp } from 'firebase-admin/firestore'
 
 /** Position after which the next page of a user's jobs starts. */

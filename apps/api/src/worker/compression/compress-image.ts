@@ -4,7 +4,7 @@ import {
   IMAGE_TYPES,
   imageFormats,
   type ImageType,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 import sharp, { type Metadata, type Sharp } from 'sharp'
 
 import { PermanentJobError } from './permanent-job-error.js'

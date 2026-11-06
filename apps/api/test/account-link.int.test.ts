@@ -4,7 +4,7 @@ import {
   listJobsResponseSchema,
   meResponseSchema,
   telegramLoginResponseSchema,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 import { Auth } from 'firebase-admin/auth'
 import { Firestore } from 'firebase-admin/firestore'
 import request from 'supertest'

@@ -1,4 +1,4 @@
-import type { AccountKind } from '@onetodone/image-compressor-shared'
+import type { AccountKind } from '@onetodone/compress-shared'
 
 /** The user a request or a job acts for. */
 export interface AuthUser {

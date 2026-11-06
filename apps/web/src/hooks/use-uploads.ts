@@ -1,6 +1,6 @@
 'use client'
 
-import type { CompressionPreset, QuotaErrorCode } from '@onetodone/image-compressor-shared'
+import type { CompressionPreset, QuotaErrorCode } from '@onetodone/compress-shared'
 import { useCallback, useState } from 'react'
 
 import { api } from '@/lib/api'

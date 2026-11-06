@@ -3,14 +3,14 @@ import { describe, expect, it } from 'vitest'
 import { apiConfigSchema, botConfigSchema, parseConfig, workerConfigSchema } from './config.js'
 
 const apiEnv = {
-  GCP_PROJECT_ID: 'demo-image-compressor',
+  GCP_PROJECT_ID: 'demo-onetodone-compress',
   CORS_ORIGINS: 'http://localhost:3000, https://example.web.app',
   R2_ACCOUNT_ID: 'account',
   R2_ACCESS_KEY_ID: 'key',
   R2_SECRET_ACCESS_KEY: 'secret',
   R2_BUCKET: 'bucket',
   CLOUDINARY_URL: 'cloudinary://123:secret@cloud',
-  CLOUDINARY_FOLDER: 'image-compressor-test',
+  CLOUDINARY_FOLDER: 'onetodone-compress-test',
   REDIS_URL: 'redis://127.0.0.1:6379/4',
 }
 
@@ -21,7 +21,7 @@ const workerEnv = {
   R2_SECRET_ACCESS_KEY: 'secret',
   R2_BUCKET: 'bucket',
   CLOUDINARY_URL: 'cloudinary://123:secret@cloud',
-  CLOUDINARY_FOLDER: 'image-compressor-test',
+  CLOUDINARY_FOLDER: 'onetodone-compress-test',
   REDIS_URL: 'redis://127.0.0.1:6379/4',
 }
 
@@ -34,7 +34,7 @@ describe('parseConfig', () => {
       HOST: '0.0.0.0',
       PORT: 8080,
       SLOW_CALL_THRESHOLD_MS: 1000,
-      QUEUE_PREFIX: 'image-compressor',
+      QUEUE_PREFIX: 'onetodone-compress',
       QUEUE_MAX_ATTEMPTS: 5,
       QUEUE_BACKOFF_MS: 10_000,
       QUEUE_CONCURRENCY: 2,
@@ -126,7 +126,7 @@ describe('parseConfig', () => {
     for (const value of [undefined, '']) {
       const config = parseConfig(apiConfigSchema, { ...apiEnv, CLOUDINARY_URL: value, CLOUDINARY_FOLDER: undefined })
       expect(config.CLOUDINARY_URL).toBeUndefined()
-      expect(config.CLOUDINARY_FOLDER).toBe('image-compressor')
+      expect(config.CLOUDINARY_FOLDER).toBe('onetodone-compress')
     }
   })
 

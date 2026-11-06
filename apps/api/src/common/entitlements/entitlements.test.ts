@@ -1,4 +1,4 @@
-import { MAX_INPUT_BYTES } from '@onetodone/image-compressor-shared'
+import { MAX_INPUT_BYTES } from '@onetodone/compress-shared'
 import { describe, expect, it } from 'vitest'
 
 import { entitlementsFor } from './entitlements.js'

@@ -10,7 +10,7 @@ import {
   listJobsQuerySchema,
   type ListJobsResponse,
   type SubmitJobResponse,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js'
 import type { AuthUser } from '../../common/auth/auth-user.js'

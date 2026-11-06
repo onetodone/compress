@@ -1,4 +1,4 @@
-import type { JobSummary, Quota } from '@onetodone/image-compressor-shared'
+import type { JobSummary, Quota } from '@onetodone/compress-shared'
 import { describe, expect, it } from 'vitest'
 
 import { JOB_LIFETIME_MS } from '../common/jobs/job-lifetime.js'

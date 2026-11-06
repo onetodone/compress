@@ -1,15 +1,15 @@
 {
-  "name": "@onetodone/image-compressor-web",
+  "name": "@onetodone/compress-web",
   "version": "0.0.0",
   "private": true,
   "type": "module",
   "scripts": {
-    "dev": "pnpm --filter @onetodone/image-compressor-shared build && next dev",
+    "dev": "pnpm --filter @onetodone/compress-shared build && next dev",
     "build": "next build",
     "typecheck": "next typegen && tsc --noEmit"
   },
   "dependencies": {
-    "@onetodone/image-compressor-shared": "workspace:*",
+    "@onetodone/compress-shared": "workspace:*",
     "fflate": "^0.8.3",
     "firebase": "^13.0.0",
     "next": "16.4.2",

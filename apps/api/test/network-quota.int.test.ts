@@ -15,7 +15,7 @@ describe('RedisNetworkQuota', () => {
     redis = new Redis(TEST_REDIS_URL)
     quota = new RedisNetworkQuota(
       new Redis(TEST_REDIS_URL),
-      'image-compressor-test',
+      'onetodone-compress-test',
       new CallTimer(10_000, new Logger('test')),
     )
   })
@@ -62,7 +62,7 @@ describe('RedisNetworkQuota', () => {
   it('lets counters expire after their day', async () => {
     await quota.reserve('203.0.113.7', day, 1)
 
-    const ttl = await redis.ttl(`image-compressor-test:network-quota:${day}:203.0.113.7`)
+    const ttl = await redis.ttl(`onetodone-compress-test:network-quota:${day}:203.0.113.7`)
     expect(ttl).toBeGreaterThan(24 * 60 * 60)
     expect(ttl).toBeLessThanOrEqual(2 * 24 * 60 * 60)
   })

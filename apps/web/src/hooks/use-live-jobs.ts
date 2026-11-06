@@ -1,6 +1,6 @@
 'use client'
 
-import { isTerminalJobStatus, type JobSummary, toJobSummary } from '@onetodone/image-compressor-shared'
+import { isTerminalJobStatus, type JobSummary, toJobSummary } from '@onetodone/compress-shared'
 import { doc, onSnapshot, type Unsubscribe } from 'firebase/firestore'
 import { useEffect, useMemo, useRef, useState } from 'react'
 

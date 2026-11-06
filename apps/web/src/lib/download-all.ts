@@ -1,4 +1,4 @@
-import type { JobSummary } from '@onetodone/image-compressor-shared'
+import type { JobSummary } from '@onetodone/compress-shared'
 
 import { ApiError } from './api-error'
 import { resultFileName } from './files'

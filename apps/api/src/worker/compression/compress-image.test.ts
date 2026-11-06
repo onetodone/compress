@@ -1,4 +1,4 @@
-import { COMPRESSION_PRESETS } from '@onetodone/image-compressor-shared'
+import { COMPRESSION_PRESETS } from '@onetodone/compress-shared'
 import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 

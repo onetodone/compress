@@ -1,5 +1,5 @@
 import { Controller, Get, Inject, Ip } from '@nestjs/common'
-import type { MeResponse } from '@onetodone/image-compressor-shared'
+import type { MeResponse } from '@onetodone/compress-shared'
 
 import { AccountLinkService } from '../../common/accounts/account-link.service.js'
 import type { AuthUser } from '../../common/auth/auth-user.js'

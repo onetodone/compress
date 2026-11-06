@@ -32,13 +32,13 @@ const cloudinaryConfigSchema = z.object({
         'Must look like cloudinary://<api_key>:<api_secret>@<cloud_name>',
       ),
   ),
-  CLOUDINARY_FOLDER: required.default('image-compressor'),
+  CLOUDINARY_FOLDER: required.default('onetodone-compress'),
 })
 
 const queueConfigSchema = z.object({
   // The database number in the path keeps apps that share one Redis apart.
   REDIS_URL: z.string().regex(/^rediss?:\/\/[^\s]+$/, 'Must look like redis://[user:password@]host:port[/db]'),
-  QUEUE_PREFIX: required.default('image-compressor'),
+  QUEUE_PREFIX: required.default('onetodone-compress'),
   QUEUE_MAX_ATTEMPTS: z.coerce.number().int().min(1).default(5),
   // First retry delay; each further retry waits twice as long.
   QUEUE_BACKOFF_MS: z.coerce.number().int().min(0).default(10_000),

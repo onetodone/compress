@@ -1,4 +1,4 @@
-import { jobIdSchema } from '@onetodone/image-compressor-shared'
+import { jobIdSchema } from '@onetodone/compress-shared'
 import { z } from 'zod'
 
 /** Name of the BullMQ queue that carries compression tasks. */

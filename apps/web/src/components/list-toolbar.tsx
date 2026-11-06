@@ -1,6 +1,6 @@
 'use client'
 
-import { formatBytes, type JobSummary } from '@onetodone/image-compressor-shared'
+import { formatBytes, type JobSummary } from '@onetodone/compress-shared'
 import { useState } from 'react'
 
 import { BUTTON } from '@/components/job-card'

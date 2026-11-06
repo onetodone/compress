@@ -1,12 +1,6 @@
 'use client'
 
-import {
-  jobsUsedToday,
-  type MeResponse,
-  type Quota,
-  type UserLimits,
-  utcDayKey,
-} from '@onetodone/image-compressor-shared'
+import { jobsUsedToday, type MeResponse, type Quota, type UserLimits, utcDayKey } from '@onetodone/compress-shared'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useEffect, useRef, useState } from 'react'
 

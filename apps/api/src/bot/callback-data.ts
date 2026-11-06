@@ -1,4 +1,4 @@
-import { jobIdSchema, linkCodeSchema } from '@onetodone/image-compressor-shared'
+import { jobIdSchema, linkCodeSchema } from '@onetodone/compress-shared'
 
 /** What a button under a bot message asks for. Pages are 0-based. */
 export type CallbackAction =

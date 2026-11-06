@@ -8,7 +8,7 @@ import {
   type ImageType,
   formatBytes,
   type JobSummary,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 
 /** A file the user picked, either accepted for upload or rejected with a reason. */
 export type CheckedFile = { ok: true; request: CreateJobRequest } | { ok: false; reason: string }

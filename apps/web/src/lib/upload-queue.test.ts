@@ -1,4 +1,4 @@
-import type { CreateJobRequest } from '@onetodone/image-compressor-shared'
+import type { CreateJobRequest } from '@onetodone/compress-shared'
 import { describe, expect, it, vi } from 'vitest'
 
 import { ApiError } from './api-error'

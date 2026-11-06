@@ -6,7 +6,7 @@ import { compressionWindowMs, staleJobCutoffs } from './stale-jobs.js'
 
 const config: QueueConfig = {
   REDIS_URL: 'redis://127.0.0.1:6379/0',
-  QUEUE_PREFIX: 'image-compressor',
+  QUEUE_PREFIX: 'onetodone-compress',
   QUEUE_MAX_ATTEMPTS: 5,
   QUEUE_BACKOFF_MS: 10_000,
 }
