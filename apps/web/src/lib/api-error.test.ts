@@ -44,9 +44,11 @@ describe('apiError', () => {
 
 describe('quotaLimitMessage', () => {
   it('suggests signing in to anonymous users only', () => {
-    expect(quotaLimitMessage('daily_limit', true)).toBe('Daily limit reached. Sign in for more, or try again tomorrow.')
-    expect(quotaLimitMessage('daily_limit', false)).toBe('Daily limit reached. Try again tomorrow.')
-    expect(quotaLimitMessage('network_daily_limit', true)).toBe(
+    expect(quotaLimitMessage('daily_limit', 'anonymous')).toBe(
+      'Daily limit reached. Sign in for more, or try again tomorrow.',
+    )
+    expect(quotaLimitMessage('daily_limit', 'registered')).toBe('Daily limit reached. Try again tomorrow.')
+    expect(quotaLimitMessage('network_daily_limit', 'anonymous')).toBe(
       'Too many images from your network today. Sign in to continue.',
     )
   })

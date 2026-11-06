@@ -1,6 +1,11 @@
 'use client'
 
-import type { JobSummary, JobSummaryStatus } from '@onetodone/image-compressor-shared'
+import {
+  type AccountKind,
+  formatBytes,
+  type JobSummary,
+  type JobSummaryStatus,
+} from '@onetodone/image-compressor-shared'
 import Image from 'next/image'
 import { type ReactNode, useState } from 'react'
 
@@ -8,7 +13,7 @@ import { useResultUrl } from '@/hooks/use-result-url'
 import type { Upload } from '@/hooks/use-uploads'
 import { api } from '@/lib/api'
 import { ApiError, quotaLimitMessage } from '@/lib/api-error'
-import { formatBytes, savedPercent } from '@/lib/files'
+import { savedPercent } from '@/lib/files'
 
 const STATUS_LABELS: Record<JobSummaryStatus, string> = {
   awaiting_upload: 'Not uploaded',
@@ -157,7 +162,7 @@ function JobState({ job, liveStopped }: { job: JobSummary; liveStopped: boolean 
   )
 }
 
-function UploadState({ upload, isAnonymous }: { upload: Upload; isAnonymous: boolean }) {
+function UploadState({ upload, accountKind }: { upload: Upload; accountKind: AccountKind }) {
   switch (upload.stage) {
     case 'rejected':
     case 'error':
@@ -165,7 +170,7 @@ function UploadState({ upload, isAnonymous }: { upload: Upload; isAnonymous: boo
     case 'limited':
       return (
         <p className="text-sm text-amber-700 dark:text-amber-400">
-          {quotaLimitMessage(upload.limit ?? 'daily_limit', isAnonymous)}
+          {quotaLimitMessage(upload.limit ?? 'daily_limit', accountKind)}
         </p>
       )
     case 'waiting':
@@ -185,13 +190,13 @@ interface JobCardProps {
   /** Latest known state of the job, once there is one. */
   job: JobSummary | null
   liveStopped: boolean
-  isAnonymous: boolean
+  accountKind: AccountKind
   /** Removes the card after the job was deleted or a refused file was dismissed. */
   onRemove: () => void
 }
 
 /** One image of the list: the upload while it runs, then the live job with its result. */
-export function JobCard({ upload, job, liveStopped, isAnonymous, onRemove }: JobCardProps) {
+export function JobCard({ upload, job, liveStopped, accountKind, onRemove }: JobCardProps) {
   const name = job?.originalName ?? upload?.name ?? ''
   const jobId = job?.id ?? upload?.jobId ?? null
   // While the file is still being uploaded there is nothing to delete yet.
@@ -208,7 +213,7 @@ export function JobCard({ upload, job, liveStopped, isAnonymous, onRemove }: Job
         {job && (!upload || upload.stage === 'submitted') ? (
           <JobState job={job} liveStopped={liveStopped} />
         ) : upload ? (
-          <UploadState upload={upload} isAnonymous={isAnonymous} />
+          <UploadState upload={upload} accountKind={accountKind} />
         ) : null}
       </div>
       {jobId && settled ? (

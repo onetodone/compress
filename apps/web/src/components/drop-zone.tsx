@@ -1,18 +1,18 @@
 'use client'
 
-import { imageFormats, MAX_INPUT_BYTES } from '@onetodone/image-compressor-shared'
+import { formatBytes, imageFormats } from '@onetodone/image-compressor-shared'
 import { type DragEvent, useState } from 'react'
-
-import { formatBytes } from '@/lib/files'
 
 interface DropZoneProps {
   disabled: boolean
   /** Shown instead of the instructions, e.g. why the zone is disabled. */
   hint: string | null
+  /** Largest file the user may upload; shown with the instructions when known. */
+  maxInputBytes: number | null
   onFiles: (files: File[]) => void
 }
 
-export function DropZone({ disabled, hint, onFiles }: DropZoneProps) {
+export function DropZone({ disabled, hint, maxInputBytes, onFiles }: DropZoneProps) {
   const [dragging, setDragging] = useState(false)
 
   const onDragOver = (event: DragEvent) => {
@@ -64,7 +64,8 @@ export function DropZone({ disabled, hint, onFiles }: DropZoneProps) {
         <>
           <span className="font-medium">Drop images here or click to choose</span>
           <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            {imageFormats.names('or')}, up to {formatBytes(MAX_INPUT_BYTES)} each
+            {imageFormats.names('or')}
+            {maxInputBytes !== null && `, up to ${formatBytes(maxInputBytes)} each`}
           </span>
         </>
       )}

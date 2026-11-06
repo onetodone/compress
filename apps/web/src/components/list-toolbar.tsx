@@ -1,12 +1,12 @@
 'use client'
 
-import type { JobSummary } from '@onetodone/image-compressor-shared'
+import { formatBytes, type JobSummary } from '@onetodone/image-compressor-shared'
 import { useState } from 'react'
 
 import { BUTTON } from '@/components/job-card'
 import { api } from '@/lib/api'
 import { archiveResults, fetchBytes } from '@/lib/download-all'
-import { formatBytes, savedPercent } from '@/lib/files'
+import { savedPercent } from '@/lib/files'
 
 /** Counts of the images picked in this session. */
 export interface UploadTotals {

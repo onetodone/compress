@@ -4,10 +4,11 @@ import { FieldValue, Firestore, type Transaction } from 'firebase-admin/firestor
 
 import type { QuotaConfig } from '../../common/config/config.js'
 import { CONFIG } from '../../common/config/config.module.js'
+import { type Entitlements, entitlementsFor } from '../../common/entitlements/entitlements.js'
 import { CallTimer } from '../../common/logging/call-timer.js'
 import { networkOf } from '../../common/quota/network.js'
 import { consumeQuota, currentQuota, readStoredUsage } from '../../common/quota/quota.js'
-import type { AuthUser } from '../auth/auth-user.js'
+import type { AuthUser } from '../../common/auth/auth-user.js'
 import { NetworkQuota } from './network-quota.js'
 
 const USERS = 'users'
@@ -37,9 +38,14 @@ export class QuotaService {
     @Inject(CONFIG) private readonly config: QuotaConfig,
   ) {}
 
+  /** Returns what the user may do: daily jobs, file size and whether the network limit applies. */
+  entitlements(user: AuthUser): Entitlements {
+    return entitlementsFor(user, 'free', this.config)
+  }
+
   async get(user: AuthUser, now = new Date()): Promise<Quota> {
     const snapshot = await this.timer.measure('firestore', 'users.get', () => this.ref(user.uid).get())
-    return currentQuota(readStoredUsage(snapshot.data()), this.limit(user), now)
+    return currentQuota(readStoredUsage(snapshot.data()), this.entitlements(user).dailyJobs, now)
   }
 
   /** Whether the client network of an anonymous user has no jobs left today. */
@@ -64,8 +70,8 @@ export class QuotaService {
   }
 
   /**
-   * Counts one job against the client network of an anonymous user. Returns `null` when the network
-   * is not limited (signed-in user or limit disabled).
+   * Counts one job against the client network of an anonymous user. Returns `null` when the user is
+   * not limited per network (registered user or limit disabled).
    *
    * @throws HttpException 429 when the network has no jobs left today
    */
@@ -98,22 +104,17 @@ export class QuotaService {
   async consume(tx: Transaction, user: AuthUser, now = new Date()): Promise<Quota> {
     const ref = this.ref(user.uid)
     const snapshot = await tx.get(ref)
-    const quota = consumeQuota(readStoredUsage(snapshot.data()), this.limit(user), now)
+    const quota = consumeQuota(readStoredUsage(snapshot.data()), this.entitlements(user).dailyJobs, now)
     if (!quota) throw limitReached('daily_limit', 'Daily job limit reached')
 
-    const fields = { dayKey: quota.dayKey, jobsToday: quota.used, isAnonymous: user.isAnonymous }
+    const fields = { dayKey: quota.dayKey, jobsToday: quota.used, isAnonymous: user.kind === 'anonymous' }
     if (snapshot.exists) tx.update(ref, fields)
     else tx.set(ref, { ...fields, createdAt: FieldValue.serverTimestamp() })
     return quota
   }
 
-  private limit(user: AuthUser): number {
-    return user.isAnonymous ? this.config.QUOTA_ANONYMOUS_DAILY : this.config.QUOTA_SIGNED_IN_DAILY
-  }
-
   private networkLimit(user: AuthUser): number | null {
-    const limit = this.config.QUOTA_ANONYMOUS_PER_IP_DAILY
-    return user.isAnonymous && limit > 0 ? limit : null
+    return this.entitlements(user).networkLimited ? this.config.QUOTA_ANONYMOUS_PER_IP_DAILY : null
   }
 
   private ref(uid: string) {

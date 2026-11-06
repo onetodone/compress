@@ -1,13 +1,13 @@
-import { type QuotaErrorCode, quotaErrorCodeSchema } from '@onetodone/image-compressor-shared'
+import { type AccountKind, type QuotaErrorCode, quotaErrorCodeSchema } from '@onetodone/image-compressor-shared'
 
 /**
  * Returns the message for a refused job.
  * @param code limit that was reached
- * @param isAnonymous whether signing in would raise the limit
+ * @param kind account kind of the user; signing in raises the limit of an anonymous one
  */
-export function quotaLimitMessage(code: QuotaErrorCode, isAnonymous: boolean): string {
+export function quotaLimitMessage(code: QuotaErrorCode, kind: AccountKind): string {
   if (code === 'network_daily_limit') return 'Too many images from your network today. Sign in to continue.'
-  return isAnonymous
+  return kind === 'anonymous'
     ? 'Daily limit reached. Sign in for more, or try again tomorrow.'
     : 'Daily limit reached. Try again tomorrow.'
 }
@@ -50,7 +50,7 @@ export function apiError(status: number, body: unknown): ApiError {
  * @param body parsed JSON body, if any
  */
 export function apiErrorMessage(status: number, body: unknown): string {
-  if (status === 429) return quotaLimitMessage(quotaErrorCode(body), false)
+  if (status === 429) return quotaLimitMessage(quotaErrorCode(body), 'registered')
   if (status === 401) return 'Your session expired. Reload the page.'
   const message = typeof body === 'object' && body !== null ? (body as { message?: unknown }).message : undefined
   // The API only puts user-safe text into 4xx messages; 5xx details are never shown.

@@ -13,7 +13,7 @@ import {
 } from '@onetodone/image-compressor-shared'
 
 import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js'
-import type { AuthUser } from '../auth/auth-user.js'
+import type { AuthUser } from '../../common/auth/auth-user.js'
 import { CurrentUser } from '../auth/current-user.decorator.js'
 import { JobsService } from './jobs.service.js'
 

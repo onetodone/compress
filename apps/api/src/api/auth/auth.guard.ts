@@ -2,6 +2,7 @@ import { type CanActivate, type ExecutionContext, Injectable, UnauthorizedExcept
 import { Reflector } from '@nestjs/core'
 import { Auth, type DecodedIdToken } from 'firebase-admin/auth'
 
+import { accountKindOf } from '../../common/auth/auth-user.js'
 import { IS_PUBLIC_KEY } from '../../common/auth/public.decorator.js'
 import { CallTimer } from '../../common/logging/call-timer.js'
 import type { AuthenticatedRequest } from './auth-user.js'
@@ -29,7 +30,7 @@ export class AuthGuard implements CanActivate {
     if (!token) throw new UnauthorizedException('Missing bearer token')
 
     const decoded = await this.verify(token)
-    request.user = { uid: decoded.uid, isAnonymous: decoded.firebase.sign_in_provider === 'anonymous' }
+    request.user = { uid: decoded.uid, kind: accountKindOf(decoded.firebase.sign_in_provider) }
     return true
   }
 

@@ -4,7 +4,7 @@ import { Firestore } from 'firebase-admin/firestore'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createApiApp } from '../src/api/api.module.js'
-import type { AuthUser } from '../src/api/auth/auth-user.js'
+import type { AuthUser } from '../src/common/auth/auth-user.js'
 import { QuotaService } from '../src/api/users/quota.service.js'
 import { apiConfig } from './support/config.js'
 import { clearFirestore } from './support/emulators.js'
@@ -13,7 +13,7 @@ describe('QuotaService', () => {
   let app: NestExpressApplication
   let firestore: Firestore
   let quota: QuotaService
-  const user: AuthUser = { uid: 'user-1', isAnonymous: true }
+  const user: AuthUser = { uid: 'user-1', kind: 'anonymous' }
 
   beforeAll(async () => {
     app = await createApiApp(apiConfig)
@@ -77,10 +77,17 @@ describe('QuotaService', () => {
     await consume()
     const createdAt = (await firestore.doc('users/user-1').get()).get('createdAt')
 
-    await consume({ uid: 'user-1', isAnonymous: false })
+    await consume({ uid: 'user-1', kind: 'registered' })
 
     const snapshot = await firestore.doc('users/user-1').get()
     expect(snapshot.get('createdAt')).toEqual(createdAt)
     expect(snapshot.get('isAnonymous')).toBe(false)
+  })
+
+  it('never counts a registered user without a client address against a network', async () => {
+    const registered: AuthUser = { uid: 'user-2', kind: 'registered' }
+
+    expect(await quota.reserveNetwork(registered, undefined)).toBeNull()
+    expect(await quota.networkLimitReached(registered, undefined)).toBe(false)
   })
 })

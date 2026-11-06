@@ -65,7 +65,10 @@ export function readJobSettings(value: unknown): JobSettings {
   return storedJobSettingsSchema.parse(value ?? {})
 }
 
-/** Largest original image accepted, in bytes (10 MB). */
+/**
+ * Largest original image the API accepts from anyone, in bytes (10 MB). The limit of a user can be
+ * lower; `GET /me` returns it as `limits.maxInputBytes`.
+ */
 export const MAX_INPUT_BYTES = 10 * 1024 * 1024
 
 /** How long a presigned upload URL stays valid, in seconds (10 minutes). */
