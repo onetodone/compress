@@ -1,11 +1,6 @@
 'use client'
 
-import {
-  type AccountKind,
-  formatBytes,
-  type JobSummary,
-  type JobSummaryStatus,
-} from '@onetodone/image-compressor-shared'
+import { type AccountKind, formatBytes, type JobSummary, type JobSummaryStatus } from '@onetodone/compress-shared'
 import Image from 'next/image'
 import { type ReactNode, useState } from 'react'
 

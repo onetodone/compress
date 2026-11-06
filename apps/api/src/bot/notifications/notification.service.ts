@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { downloadFileName, imageTypeSchema, type JobSummary, toJobSummary } from '@onetodone/image-compressor-shared'
+import { downloadFileName, imageTypeSchema, type JobSummary, toJobSummary } from '@onetodone/compress-shared'
 import { FieldValue, Firestore } from 'firebase-admin/firestore'
 
 import { awaitsChatAnswer, JOBS, readChatTarget } from '../../common/jobs/job-records.js'

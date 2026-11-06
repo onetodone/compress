@@ -1,6 +1,6 @@
 'use client'
 
-import type { AccountKind } from '@onetodone/image-compressor-shared'
+import type { AccountKind } from '@onetodone/compress-shared'
 import { type Auth, onIdTokenChanged, signInAnonymously, signInWithCustomToken, type User } from 'firebase/auth'
 import { useCallback, useEffect, useRef, useState } from 'react'
 

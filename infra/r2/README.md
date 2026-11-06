@@ -4,7 +4,7 @@ Originals and results are stored in R2 and accessed through the S3 API. Buckets 
 
 | Environment | Bucket |
 |---|---|
-| Development | `image-compressor-dev` |
+| Development | `onetodone-compress-dev` |
 | Production | a bucket of its own, with its own token |
 
 ## Bucket

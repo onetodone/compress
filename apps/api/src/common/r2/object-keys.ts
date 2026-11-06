@@ -1,4 +1,4 @@
-import { type ImageType, imageFormats } from '@onetodone/image-compressor-shared'
+import { type ImageType, imageFormats } from '@onetodone/compress-shared'
 
 /** R2 key of the original image uploaded for a job. */
 export function originalKey(uid: string, jobId: string): string {

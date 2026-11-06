@@ -14,7 +14,7 @@ import {
   type TelegramLoginRequest,
   telegramLoginRequestSchema,
   type TelegramLoginResponse,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 
 import { AccountLinkService } from '../../common/accounts/account-link.service.js'
 import type { AuthUser } from '../../common/auth/auth-user.js'

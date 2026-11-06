@@ -1,5 +1,5 @@
 {
-  "name": "@onetodone/image-compressor-shared",
+  "name": "@onetodone/compress-shared",
   "version": "0.0.0",
   "private": true,
   "type": "module",

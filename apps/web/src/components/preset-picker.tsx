@@ -1,6 +1,6 @@
 'use client'
 
-import { COMPRESSION_PRESETS, type CompressionPreset } from '@onetodone/image-compressor-shared'
+import { COMPRESSION_PRESETS, type CompressionPreset } from '@onetodone/compress-shared'
 
 const LABELS: Record<CompressionPreset, { label: string; hint: string }> = {
   balanced: { label: 'Balanced', hint: 'Looks the same as the original' },

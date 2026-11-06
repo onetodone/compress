@@ -1,6 +1,6 @@
 'use client'
 
-import type { JobSummary } from '@onetodone/image-compressor-shared'
+import type { JobSummary } from '@onetodone/compress-shared'
 import { useCallback, useEffect, useState } from 'react'
 
 import { api } from '@/lib/api'

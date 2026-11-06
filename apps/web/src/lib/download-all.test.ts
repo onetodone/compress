@@ -1,4 +1,4 @@
-import type { JobSummary } from '@onetodone/image-compressor-shared'
+import type { JobSummary } from '@onetodone/compress-shared'
 import { strFromU8, strToU8, unzipSync } from 'fflate'
 import { describe, expect, it, vi } from 'vitest'
 

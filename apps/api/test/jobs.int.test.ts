@@ -9,7 +9,7 @@ import {
   submitJobResponseSchema,
   UPLOAD_URL_TTL_SECONDS,
   utcDayKey,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 import { FieldValue, Firestore, Timestamp } from 'firebase-admin/firestore'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'

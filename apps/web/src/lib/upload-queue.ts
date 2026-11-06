@@ -1,4 +1,4 @@
-import type { CreateJobRequest, CreateJobResponse, QuotaErrorCode } from '@onetodone/image-compressor-shared'
+import type { CreateJobRequest, CreateJobResponse, QuotaErrorCode } from '@onetodone/compress-shared'
 
 import { ApiError } from './api-error'
 import { UploadError } from './upload'

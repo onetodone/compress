@@ -1,4 +1,4 @@
-import { jobsUsedToday, type Quota, utcDayKey } from '@onetodone/image-compressor-shared'
+import { jobsUsedToday, type Quota, utcDayKey } from '@onetodone/compress-shared'
 
 /** Quota counters as stored in `users/{uid}`. */
 export interface StoredUsage {

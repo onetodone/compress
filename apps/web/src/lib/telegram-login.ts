@@ -1,4 +1,4 @@
-import { linkCodeSchema, TELEGRAM_LOGIN_FRAGMENT } from '@onetodone/image-compressor-shared'
+import { linkCodeSchema, TELEGRAM_LOGIN_FRAGMENT } from '@onetodone/compress-shared'
 
 /**
  * Returns the login code a Telegram bot link carries in the URL fragment (`#telegram-login=<code>`),

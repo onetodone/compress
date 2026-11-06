@@ -1,4 +1,4 @@
-import { type AccountKind, type QuotaErrorCode, quotaErrorCodeSchema } from '@onetodone/image-compressor-shared'
+import { type AccountKind, type QuotaErrorCode, quotaErrorCodeSchema } from '@onetodone/compress-shared'
 
 /**
  * Returns the message for a refused job.

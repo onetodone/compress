@@ -35,8 +35,8 @@ jobs:
           NEXT_PUBLIC_API_URL: http://localhost:3001
           NEXT_PUBLIC_USE_EMULATORS: 'true'
           NEXT_PUBLIC_FIREBASE_API_KEY: demo-api-key
-          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-image-compressor.firebaseapp.com
-          NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-image-compressor
+          NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN: demo-onetodone-compress.firebaseapp.com
+          NEXT_PUBLIC_FIREBASE_PROJECT_ID: demo-onetodone-compress
 
   integration:
     name: Integration tests

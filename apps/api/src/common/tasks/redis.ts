@@ -13,7 +13,7 @@ export type RedisRole = 'producer' | 'consumer'
  */
 export function createRedisConnection(url: string, role: RedisRole): Redis {
   const redis = new Redis(url, {
-    connectionName: `image-compressor-${role}`,
+    connectionName: `onetodone-compress-${role}`,
     maxRetriesPerRequest: role === 'producer' ? 1 : null,
     connectTimeout: 5000,
   })

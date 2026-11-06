@@ -1,5 +1,5 @@
 import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/common'
-import { type Quota, type QuotaErrorCode, utcDayKey } from '@onetodone/image-compressor-shared'
+import { type Quota, type QuotaErrorCode, utcDayKey } from '@onetodone/compress-shared'
 import { FieldValue, Firestore, type Transaction } from 'firebase-admin/firestore'
 
 import type { QuotaConfig } from '../config/config.js'

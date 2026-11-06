@@ -1,5 +1,5 @@
 import { Inject, Injectable, Logger } from '@nestjs/common'
-import type { JobStatus } from '@onetodone/image-compressor-shared'
+import type { JobStatus } from '@onetodone/compress-shared'
 import {
   type DocumentData,
   type DocumentSnapshot,

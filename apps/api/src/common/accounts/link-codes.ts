@@ -1,6 +1,6 @@
 import { createHash, randomBytes } from 'node:crypto'
 
-import { linkCodeSchema } from '@onetodone/image-compressor-shared'
+import { linkCodeSchema } from '@onetodone/compress-shared'
 
 /** Firestore collection of one-time codes, stored under the hash of the code. */
 export const LINK_CODES = 'linkCodes'

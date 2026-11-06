@@ -14,7 +14,7 @@ import {
   imageFormats,
   imageTypeSchema,
   TELEGRAM_LOGIN_FRAGMENT,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 
 import { AccountLinkService, type LinkOutcome } from '../common/accounts/account-link.service.js'
 import { LINK_CODE_LIFETIME_MS } from '../common/accounts/link-codes.js'

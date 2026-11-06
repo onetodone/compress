@@ -1,4 +1,4 @@
-# OneToDone Image Compressor
+# Compress OneToDone
 
 Upload JPEG, PNG, WebP or AVIF images, one or many at once, and download smaller versions in the same format. A background worker compresses each image with `sharp`; every image appears in one list that updates in real time with its state, thumbnail and size saved. Download results one by one or all together as a ZIP. Anonymous users get a small daily quota; signing in with Google raises it.
 

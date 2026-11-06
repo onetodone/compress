@@ -1,4 +1,4 @@
-import { type JobStatus, TERMINAL_JOB_STATUSES, utcDayKey } from '@onetodone/image-compressor-shared'
+import { type JobStatus, TERMINAL_JOB_STATUSES, utcDayKey } from '@onetodone/compress-shared'
 import { z } from 'zod'
 import {
   type DocumentData,

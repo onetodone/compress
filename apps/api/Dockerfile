@@ -14,11 +14,11 @@ COPY package.json pnpm-lock.yaml pnpm-workspace.yaml tsconfig.base.json ./
 COPY apps/api/package.json apps/api/
 COPY apps/web/package.json apps/web/
 COPY packages/shared/package.json packages/shared/
-RUN pnpm install --frozen-lockfile --filter "@onetodone/image-compressor-api..."
+RUN pnpm install --frozen-lockfile --filter "@onetodone/compress-api..."
 COPY packages/shared packages/shared
 COPY apps/api apps/api
-RUN pnpm --filter "@onetodone/image-compressor-api..." run build \
-  && pnpm --filter @onetodone/image-compressor-api deploy --prod --legacy /out
+RUN pnpm --filter "@onetodone/compress-api..." run build \
+  && pnpm --filter @onetodone/compress-api deploy --prod --legacy /out
 
 FROM node:24-slim AS runtime
 ENV NODE_ENV=production

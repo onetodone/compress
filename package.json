@@ -1,6 +1,6 @@
 {
-  "name": "@onetodone/image-compressor",
-  "version": "0.14.0",
+  "name": "@onetodone/compress",
+  "version": "0.14.1",
   "description": "Image compression service: upload JPEG or PNG images and download smaller versions.",
   "private": true,
   "type": "module",
@@ -8,11 +8,11 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/onetodone/image-compressor.git"
+    "url": "git+https://github.com/onetodone/compress.git"
   },
-  "homepage": "https://github.com/onetodone/image-compressor#readme",
+  "homepage": "https://github.com/onetodone/compress#readme",
   "bugs": {
-    "url": "https://github.com/onetodone/image-compressor/issues"
+    "url": "https://github.com/onetodone/compress/issues"
   },
   "keywords": [
     "image",
@@ -28,8 +28,8 @@
   "scripts": {
     "dev": "pnpm -r --parallel --if-present run dev",
     "build": "pnpm -r --if-present run build",
-    "start": "pnpm --filter @onetodone/image-compressor-api start",
-    "emulators": "firebase emulators:start --config infra/firebase.json --project demo-image-compressor --only auth,firestore",
+    "start": "pnpm --filter @onetodone/compress-api start",
+    "emulators": "firebase emulators:start --config infra/firebase.json --project demo-onetodone-compress --only auth,firestore",
     "format": "prettier --write \"**/*.{ts,tsx,mjs}\"",
     "format:check": "prettier --check \"**/*.{ts,tsx,mjs}\"",
     "lint": "eslint . --fix",
@@ -37,7 +37,7 @@
     "typecheck": "tsc -p tsconfig.json && pnpm -r --if-present run typecheck",
     "test": "pnpm test:unit && pnpm test:integration",
     "test:unit": "vitest run --project unit",
-    "test:integration": "firebase emulators:exec --config infra/firebase.test.json --project demo-image-compressor-test --only auth,firestore 'vitest run --project integration'"
+    "test:integration": "firebase emulators:exec --config infra/firebase.test.json --project demo-onetodone-compress-test --only auth,firestore 'vitest run --project integration'"
   },
   "devDependencies": {
     "@eslint/js": "^9.39.5",

@@ -1,5 +1,5 @@
 import { BadRequestException, ForbiddenException, Injectable, Logger } from '@nestjs/common'
-import type { TelegramStatus } from '@onetodone/image-compressor-shared'
+import type { TelegramStatus } from '@onetodone/compress-shared'
 import { Auth } from 'firebase-admin/auth'
 import {
   type DocumentReference,

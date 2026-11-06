@@ -1,5 +1,5 @@
 {
-  "name": "@onetodone/image-compressor-api",
+  "name": "@onetodone/compress-api",
   "version": "0.0.0",
   "private": true,
   "type": "module",
@@ -9,7 +9,7 @@
   "scripts": {
     "build": "tsc -p tsconfig.build.json",
     "typecheck": "tsc --noEmit",
-    "dev": "pnpm --filter @onetodone/image-compressor-shared build && tsc -p tsconfig.build.json && pnpm run \"/^watch:/\"",
+    "dev": "pnpm --filter @onetodone/compress-shared build && tsc -p tsconfig.build.json && pnpm run \"/^watch:/\"",
     "watch:tsc": "tsc -p tsconfig.build.json --watch --preserveWatchOutput",
     "watch:api": "node --watch --enable-source-maps --env-file-if-exists=../../.env dist/main.api.js",
     "watch:worker": "PORT=3002 node --watch --enable-source-maps --env-file-if-exists=../../.env dist/main.worker.js",
@@ -26,7 +26,7 @@
     "@nestjs/common": "^12.2.0",
     "@nestjs/core": "^12.2.0",
     "@nestjs/platform-express": "^12.2.0",
-    "@onetodone/image-compressor-shared": "workspace:*",
+    "@onetodone/compress-shared": "workspace:*",
     "bullmq": "^6.4.2",
     "cloudinary": "^2.11.0",
     "firebase-admin": "^14.5.0",

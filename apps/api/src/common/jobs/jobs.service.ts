@@ -17,7 +17,7 @@ import {
   type SubmitJobResponse,
   toJobSummary,
   UPLOAD_URL_TTL_SECONDS,
-} from '@onetodone/image-compressor-shared'
+} from '@onetodone/compress-shared'
 import {
   type DocumentReference,
   FieldPath,

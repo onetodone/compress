@@ -1,4 +1,4 @@
-import { formatBytes, imageFormats, type JobSummary, type Quota } from '@onetodone/image-compressor-shared'
+import { formatBytes, imageFormats, type JobSummary, type Quota } from '@onetodone/compress-shared'
 
 import { jobExpiresAt, RESULT_LIFETIME_MS } from '../common/jobs/job-lifetime.js'
 import { encodeCallback } from './callback-data.js'

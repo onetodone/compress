@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
-import { utcDayKey } from '@onetodone/image-compressor-shared'
+import { utcDayKey } from '@onetodone/compress-shared'
 import { Firestore } from 'firebase-admin/firestore'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 

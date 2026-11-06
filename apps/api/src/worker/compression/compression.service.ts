@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { type CompressionPreset, type JobStatus, readJobSettings } from '@onetodone/image-compressor-shared'
+import { type CompressionPreset, type JobStatus, readJobSettings } from '@onetodone/compress-shared'
 import { type DocumentData, FieldValue, Firestore } from 'firebase-admin/firestore'
 
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
