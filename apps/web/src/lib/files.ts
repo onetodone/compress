@@ -1,17 +1,49 @@
-import { type CreateJobRequest, createJobRequestSchema, MAX_INPUT_BYTES } from '@onetodone/image-compressor-shared'
+import {
+  type CompressionPreset,
+  type CreateJobRequest,
+  createJobRequestSchema,
+  DEFAULT_COMPRESSION_PRESET,
+  imageFormats,
+  type ImageType,
+  MAX_INPUT_BYTES,
+} from '@onetodone/image-compressor-shared'
 
 /** A file the user picked, either accepted for upload or rejected with a reason. */
 export type CheckedFile = { ok: true; request: CreateJobRequest } | { ok: false; reason: string }
 
 /**
- * Checks a picked file against the limits of `POST /jobs` before anything is uploaded.
+ * Returns the image type of a picked file. Browsers report an empty type for extensions the operating
+ * system does not know (e.g. `.avif` on some systems), so the extension decides then.
  * @param file file metadata as the browser reports it
  */
-export function checkFile(file: Pick<File, 'name' | 'type' | 'size'>): CheckedFile {
-  if (file.type !== 'image/jpeg' && file.type !== 'image/png') return { ok: false, reason: 'Only JPEG and PNG' }
+export function imageTypeOf(file: Pick<File, 'name' | 'type'>): ImageType | undefined {
+  if (file.type !== '') {
+    const declared = imageFormats.schema.safeParse(file.type)
+    return declared.success ? declared.data : undefined
+  }
+  const dot = file.name.lastIndexOf('.')
+  return dot > 0 ? imageFormats.typeOfExtension(file.name.slice(dot + 1)) : undefined
+}
+
+/**
+ * Checks a picked file against the limits of `POST /jobs` before anything is uploaded.
+ * @param file file metadata as the browser reports it
+ * @param preset compression preset the job is created with
+ */
+export function checkFile(
+  file: Pick<File, 'name' | 'type' | 'size'>,
+  preset: CompressionPreset = DEFAULT_COMPRESSION_PRESET,
+): CheckedFile {
+  const contentType = imageTypeOf(file)
+  if (!contentType) return { ok: false, reason: `Only ${imageFormats.names('and')}` }
   if (file.size === 0) return { ok: false, reason: 'The file is empty' }
   if (file.size > MAX_INPUT_BYTES) return { ok: false, reason: `Larger than ${formatBytes(MAX_INPUT_BYTES)}` }
-  const result = createJobRequestSchema.safeParse({ originalName: file.name, contentType: file.type, size: file.size })
+  const result = createJobRequestSchema.safeParse({
+    originalName: file.name,
+    contentType,
+    size: file.size,
+    settings: { preset },
+  })
   return result.success ? { ok: true, request: result.data } : { ok: false, reason: 'Unsupported file name' }
 }
 

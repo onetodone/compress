@@ -1,5 +1,6 @@
 'use client'
 
+import type { CompressionPreset } from '@onetodone/image-compressor-shared'
 import { useCallback, useEffect, useRef, useState } from 'react'
 
 import { api } from '@/lib/api'
@@ -24,7 +25,8 @@ export interface Upload {
 /** Uploads picked in this session, newest first, and functions that start more or drop one. */
 export interface Uploads {
   uploads: Upload[]
-  addFiles: (files: Iterable<File>) => void
+  /** Starts uploads of picked files, compressed with `preset`. */
+  addFiles: (files: Iterable<File>, preset: CompressionPreset) => void
   /** Drops an upload from the list and releases its object URL. */
   removeUpload: (key: string) => void
 }
@@ -51,7 +53,7 @@ export function useUploads(): Uploads {
       try {
         const { jobId, uploadUrl } = await api.createJob(request)
         update(key, { stage: 'uploading', jobId })
-        await uploadFile(uploadUrl, file, (progress) => update(key, { progress }))
+        await uploadFile(uploadUrl, file, request.contentType, (progress) => update(key, { progress }))
         update(key, { stage: 'submitting', progress: 1 })
         await api.submitJob(jobId)
         update(key, { stage: 'submitted' })
@@ -65,11 +67,11 @@ export function useUploads(): Uploads {
   )
 
   const addFiles = useCallback(
-    (files: Iterable<File>) => {
+    (files: Iterable<File>, preset: CompressionPreset) => {
       const added: Upload[] = []
       for (const file of files) {
         const key = crypto.randomUUID()
-        const checked = checkFile(file)
+        const checked = checkFile(file, preset)
         const base = { key, name: file.name, size: file.size, progress: 0, jobId: null }
         if (!checked.ok) {
           added.push({ ...base, objectUrl: null, stage: 'rejected', error: checked.reason })

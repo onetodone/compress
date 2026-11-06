@@ -1,6 +1,6 @@
 'use client'
 
-import type { JobStatus, JobSummary } from '@onetodone/image-compressor-shared'
+import type { JobSummary, JobSummaryStatus } from '@onetodone/image-compressor-shared'
 import Image from 'next/image'
 import { type ReactNode, useState } from 'react'
 
@@ -12,12 +12,13 @@ import { api } from '@/lib/api'
 import { ApiError } from '@/lib/api-error'
 import { formatBytes, savedPercent } from '@/lib/files'
 
-const STATUS_LABELS: Record<JobStatus, string> = {
+const STATUS_LABELS: Record<JobSummaryStatus, string> = {
   awaiting_upload: 'Not uploaded',
   queued: 'Queued',
   processing: 'Compressing…',
   done: 'Done',
   failed: 'Failed',
+  unknown: 'Reload the page to see the latest state',
 }
 
 const UPLOAD_LABELS: Record<Exclude<Upload['stage'], 'submitted' | 'rejected' | 'error'>, string> = {
@@ -161,7 +162,7 @@ function Result({ job }: { job: JobSummary }) {
 function JobState({ job, liveError }: { job: JobSummary; liveError: string | null }) {
   if (job.status === 'done') return <Result job={job} />
   if (job.status === 'failed') return <Problem>{job.error ?? 'The image could not be compressed.'}</Problem>
-  if (job.status === 'awaiting_upload') {
+  if (job.status === 'awaiting_upload' || job.status === 'unknown') {
     return <span className="text-sm text-zinc-500 dark:text-zinc-400">{STATUS_LABELS[job.status]}</span>
   }
   return (

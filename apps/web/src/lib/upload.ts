@@ -7,14 +7,20 @@ export class UploadError extends Error {
  * Uploads a file to a presigned URL with `PUT`, reporting progress. `fetch` cannot report upload
  * progress, hence `XMLHttpRequest`.
  * @param url presigned upload URL
- * @param file file to send; its type must match the type the URL was signed with
+ * @param file file to send
+ * @param contentType type the URL was signed with
  * @param onProgress receives the uploaded fraction from 0 to 1
  */
-export function uploadFile(url: string, file: File, onProgress: (fraction: number) => void): Promise<void> {
+export function uploadFile(
+  url: string,
+  file: File,
+  contentType: string,
+  onProgress: (fraction: number) => void,
+): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest()
     xhr.open('PUT', url)
-    xhr.setRequestHeader('Content-Type', file.type)
+    xhr.setRequestHeader('Content-Type', contentType)
     xhr.upload.onprogress = (event) => {
       if (event.lengthComputable) onProgress(event.loaded / event.total)
     }
