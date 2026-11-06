@@ -66,6 +66,10 @@ export const apiConfigSchema = baseConfigSchema.extend({
         .filter(Boolean),
     )
     .pipe(z.array(z.url()).min(1)),
+  // Username of the Telegram bot, for links that open it; without it, Telegram linking is off.
+  TELEGRAM_BOT_USERNAME: optional(
+    z.string().regex(/^[A-Za-z][A-Za-z0-9_]{3,31}$/, 'Must be the bot username without @'),
+  ),
 })
 
 /** Environment variables of the worker. */
@@ -83,6 +87,8 @@ export const botConfigSchema = baseConfigSchema.extend({
   ...queueConfigSchema.shape,
   ...quotaConfigSchema.shape,
   TELEGRAM_BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/, 'Must look like <bot id>:<secret> as given by @BotFather'),
+  // Origin of the web app, for login links; without it, /login answers that it is not available.
+  WEB_APP_URL: optional(z.url().transform((url) => url.replace(/\/+$/, ''))),
 })
 
 /** Settings shared by the API and the worker. */

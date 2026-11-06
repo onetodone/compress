@@ -47,6 +47,7 @@ describe('GET /me', () => {
       quota: { dayKey: expect.any(String), used: 0, limit: 5 },
       limits: { maxInputBytes: MAX_INPUT_BYTES },
       networkLimitReached: false,
+      telegram: { linked: false, username: null },
     })
   })
 

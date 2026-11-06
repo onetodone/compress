@@ -57,6 +57,7 @@ export const apiConfig: ApiConfig = {
   QUOTA_ANONYMOUS_DAILY: 5,
   QUOTA_SIGNED_IN_DAILY: 30,
   QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
+  TELEGRAM_BOT_USERNAME: 'test_compressor_bot',
 }
 
 export const botConfig: BotConfig = {
@@ -68,4 +69,5 @@ export const botConfig: BotConfig = {
   QUOTA_SIGNED_IN_DAILY: 30,
   QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
   TELEGRAM_BOT_TOKEN: '123456:test-token',
+  WEB_APP_URL: 'https://img.example.com',
 }

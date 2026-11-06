@@ -157,4 +157,21 @@ describe('parseConfig', () => {
     expect(parse).toThrow(/TELEGRAM_BOT_TOKEN/)
     expect(parse).not.toThrow(/hidden-value/)
   })
+
+  it('treats the bot username of the API and the web address of the bot as optional', () => {
+    expect(parseConfig(apiConfigSchema, { ...apiEnv, TELEGRAM_BOT_USERNAME: '' }).TELEGRAM_BOT_USERNAME).toBeUndefined()
+    expect(parseConfig(apiConfigSchema, { ...apiEnv, TELEGRAM_BOT_USERNAME: 'my_bot' }).TELEGRAM_BOT_USERNAME).toBe(
+      'my_bot',
+    )
+    expect(() => parseConfig(apiConfigSchema, { ...apiEnv, TELEGRAM_BOT_USERNAME: '@my_bot' })).toThrow(
+      /TELEGRAM_BOT_USERNAME/,
+    )
+
+    const botEnv = { ...workerEnv, TELEGRAM_BOT_TOKEN: '1234567890:AAH-x_yZ0123456789abcdefghijklmnopq' }
+    expect(parseConfig(botConfigSchema, botEnv).WEB_APP_URL).toBeUndefined()
+    expect(parseConfig(botConfigSchema, { ...botEnv, WEB_APP_URL: 'https://img.example.com/' }).WEB_APP_URL).toBe(
+      'https://img.example.com',
+    )
+    expect(() => parseConfig(botConfigSchema, { ...botEnv, WEB_APP_URL: 'not a url' })).toThrow(/WEB_APP_URL/)
+  })
 })

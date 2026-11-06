@@ -225,13 +225,33 @@ describe('stale job cleanup', () => {
     })
   })
 
+  it('deletes expired link codes and keeps valid ones', async () => {
+    const code = (minutesLeft: number) => ({
+      purpose: 'link',
+      uid: UID,
+      telegramId: null,
+      expiresAt: Timestamp.fromMillis(Date.now() + minutesLeft * MINUTE),
+    })
+    await firestore.doc('linkCodes/expired').set(code(-1))
+    await firestore.doc('linkCodes/valid').set(code(5))
+
+    expect(await cleanup.run()).toMatchObject({ expiredLinkCodes: 1, errors: 0 })
+    expect((await firestore.collection('linkCodes').get()).docs.map((doc) => doc.id)).toEqual(['valid'])
+  })
+
   it('changes nothing when it runs again', async () => {
     await seed('abandoned0000000000b', 'awaiting_upload', { age: 2 * DAY })
     await seed('lostTask000000000001', 'queued', { age: 2 * HOUR })
     await seed('expired0000000000001', 'done', { age: 8 * DAY })
     await cleanup.run()
 
-    expect(await cleanup.run()).toEqual({ abandonedUploads: 0, stuckJobs: 0, expiredJobs: 0, errors: 0 })
+    expect(await cleanup.run()).toEqual({
+      abandonedUploads: 0,
+      stuckJobs: 0,
+      expiredJobs: 0,
+      expiredLinkCodes: 0,
+      errors: 0,
+    })
     expect(await jobsToday()).toBe(2)
   })
 
