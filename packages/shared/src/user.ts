@@ -1,5 +1,7 @@
 import { z } from 'zod'
 
+import { telegramStatusSchema } from './telegram.js'
+
 /** Validates the daily quota of a user. */
 export const quotaSchema = z.object({
   /** UTC day the counters refer to, e.g. `2026-10-21`. */
@@ -41,6 +43,8 @@ export const meResponseSchema = z.object({
   limits: userLimitsSchema,
   /** Whether the client's network has used up its daily anonymous jobs; always `false` for signed-in users. */
   networkLimitReached: z.boolean(),
+  /** The user's Telegram link; `null` when the service has no Telegram bot. Absent from older APIs. */
+  telegram: telegramStatusSchema.nullable().default(null),
 })
 
 /** Response of `GET /me`: the signed-in user and their quota for today. */
