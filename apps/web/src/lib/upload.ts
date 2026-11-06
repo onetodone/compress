@@ -13,7 +13,7 @@ export class UploadError extends Error {
  */
 export function uploadFile(
   url: string,
-  file: File,
+  file: Blob,
   contentType: string,
   onProgress: (fraction: number) => void,
 ): Promise<void> {

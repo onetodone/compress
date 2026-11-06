@@ -2,21 +2,26 @@
 
 import {
   type CompressionPreset,
+  isTerminalJobStatus,
+  type JobSummary,
   DEFAULT_COMPRESSION_PRESET,
   imageFormats,
   MAX_INPUT_BYTES,
 } from '@onetodone/image-compressor-shared'
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 
 import { AccountControl } from '@/components/account-control'
 import { DropZone } from '@/components/drop-zone'
-import { HistoryCard, UploadCard } from '@/components/job-cards'
+import { JobCard } from '@/components/job-card'
+import { ListToolbar, type UploadTotals } from '@/components/list-toolbar'
 import { PresetPicker } from '@/components/preset-picker'
 import { QuotaMeter } from '@/components/quota-meter'
 import { type SessionUser, useAuthUser } from '@/hooks/use-auth-user'
 import { useJobHistory } from '@/hooks/use-job-history'
+import { type LiveJobEntry, useLiveJobs } from '@/hooks/use-live-jobs'
 import { useQuota } from '@/hooks/use-quota'
-import { useUploads } from '@/hooks/use-uploads'
+import { type Upload, useUploads } from '@/hooks/use-uploads'
+import { quotaLimitMessage } from '@/lib/api-error'
 import { formatBytes } from '@/lib/files'
 
 export default function HomePage() {
@@ -51,21 +56,94 @@ export default function HomePage() {
   )
 }
 
+interface ListItem {
+  key: string
+  upload: Upload | null
+  jobId: string | null
+}
+
+/** Whether an upload of this session has come to an end: refused, failed, or its job finished. */
+function isFinished(upload: Upload, job: JobSummary | undefined): boolean {
+  if (upload.stage === 'rejected' || upload.stage === 'limited' || upload.stage === 'error') return true
+  return upload.stage === 'submitted' && job !== undefined && isTerminalJobStatus(job.status)
+}
+
+function uploadTotals(uploads: readonly Upload[], jobs: ReadonlyMap<string, JobSummary>): UploadTotals | null {
+  if (uploads.length === 0) return null
+  const totals = { total: uploads.length, done: 0, failed: 0, inputBytes: 0, outputBytes: 0 }
+  for (const upload of uploads) {
+    const job = upload.jobId ? jobs.get(upload.jobId) : undefined
+    if (job?.status === 'done' && job.inputBytes !== null && job.outputBytes !== null) {
+      totals.done++
+      totals.inputBytes += job.inputBytes
+      // A result that is not smaller is replaced by the original, so it saves nothing.
+      totals.outputBytes += Math.min(job.outputBytes, job.inputBytes)
+    } else if (isFinished(upload, job)) {
+      totals.failed++
+    }
+  }
+  return totals
+}
+
 function Workspace({ user }: { user: SessionUser }) {
   const { quota, networkLimitReached } = useQuota(user.uid, user.isAnonymous)
   const history = useJobHistory(user.uid)
-  const { uploads, addFiles, removeUpload } = useUploads()
+  const { uploads, addFiles, removeUploads } = useUploads()
   const [preset, setPreset] = useState<CompressionPreset>(DEFAULT_COMPRESSION_PRESET)
+  // Jobs cleared from the list stay hidden even when a later history page contains them.
+  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
 
-  const sessionJobIds = new Set(uploads.map((upload) => upload.jobId))
-  const earlierJobs = history.jobs.filter((job) => !sessionJobIds.has(job.id))
+  const earlierJobs = useMemo(() => {
+    const sessionJobIds = new Set(uploads.flatMap((upload) => (upload.jobId ? [upload.jobId] : [])))
+    return history.jobs.filter((job) => !sessionJobIds.has(job.id) && !hidden.has(job.id))
+  }, [uploads, history.jobs, hidden])
+
+  const entries = useMemo<LiveJobEntry[]>(
+    () => [
+      ...uploads.flatMap((upload) =>
+        upload.stage === 'submitted' && upload.jobId ? [{ id: upload.jobId, initial: null }] : [],
+      ),
+      ...earlierJobs.map((job) => ({ id: job.id, initial: job })),
+    ],
+    [uploads, earlierJobs],
+  )
+  const live = useLiveJobs(entries)
+
+  const items: ListItem[] = [
+    ...uploads.map((upload) => ({
+      key: upload.key,
+      upload,
+      jobId: upload.stage === 'submitted' ? upload.jobId : null,
+    })),
+    ...earlierJobs.map((job) => ({ key: job.id, upload: null, jobId: job.id })),
+  ]
+  const downloadable = items.flatMap((item) => {
+    const job = item.jobId ? live.jobs.get(item.jobId) : undefined
+    return job?.status === 'done' ? [job] : []
+  })
+  const finishedKeys = new Set(
+    uploads
+      .filter((upload) => isFinished(upload, upload.jobId ? live.jobs.get(upload.jobId) : undefined))
+      .map((upload) => upload.key),
+  )
+
+  function removeItem(item: ListItem) {
+    if (item.upload) removeUploads(new Set([item.upload.key]))
+    if (item.jobId) history.removeJob(item.jobId)
+  }
+
+  function clearFinished() {
+    const jobIds = uploads.flatMap((upload) => (finishedKeys.has(upload.key) && upload.jobId ? [upload.jobId] : []))
+    setHidden((current) => new Set([...current, ...jobIds]))
+    removeUploads(finishedKeys)
+  }
+
+  const remaining = quota === null ? null : networkLimitReached ? 0 : Math.max(quota.limit - quota.used, 0)
   const limitHint =
     quota !== null && quota.used >= quota.limit
-      ? user.isAnonymous
-        ? 'Daily limit reached. Sign in for more, or try again tomorrow.'
-        : 'Daily limit reached. Try again tomorrow.'
+      ? quotaLimitMessage('daily_limit', user.isAnonymous)
       : networkLimitReached
-        ? 'Too many images from your network today. Sign in to continue.'
+        ? quotaLimitMessage('network_daily_limit', user.isAnonymous)
         : null
 
   return (
@@ -75,25 +153,34 @@ function Workspace({ user }: { user: SessionUser }) {
           <PresetPicker value={preset} disabled={limitHint !== null} onChange={setPreset} />
           {quota && <QuotaMeter quota={quota} exhausted={networkLimitReached} />}
         </div>
-        <DropZone disabled={limitHint !== null} hint={limitHint} onFiles={(files) => addFiles(files, preset)} />
+        <DropZone
+          disabled={limitHint !== null}
+          hint={limitHint}
+          onFiles={(files) => addFiles(files, preset, remaining)}
+        />
       </section>
 
-      {uploads.length > 0 && (
-        <section aria-label="Uploads" className="flex flex-col gap-3">
-          {uploads.map((upload) => (
-            <UploadCard key={upload.key} upload={upload} onRemove={() => removeUpload(upload.key)} />
-          ))}
-        </section>
-      )}
-
-      <section aria-labelledby="history-heading" className="flex flex-col gap-3">
-        <h2 id="history-heading" className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+      <section aria-labelledby="images-heading" className="flex flex-col gap-3">
+        <h2 id="images-heading" className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
           Your images
         </h2>
-        {earlierJobs.map((job) => (
-          <HistoryCard key={job.id} initial={job} onDeleted={() => history.removeJob(job.id)} />
+        <ListToolbar
+          totals={uploadTotals(uploads, live.jobs)}
+          downloadable={downloadable}
+          finished={finishedKeys.size}
+          onClearFinished={clearFinished}
+        />
+        {items.map((item) => (
+          <JobCard
+            key={item.key}
+            upload={item.upload}
+            job={(item.jobId && live.jobs.get(item.jobId)) || null}
+            liveStopped={item.jobId !== null && live.stopped.has(item.jobId)}
+            isAnonymous={user.isAnonymous}
+            onRemove={() => removeItem(item)}
+          />
         ))}
-        {history.status === 'idle' && earlierJobs.length === 0 && uploads.length === 0 && (
+        {history.status === 'idle' && items.length === 0 && (
           <p className="text-sm text-zinc-500 dark:text-zinc-400">Images you compress show up here.</p>
         )}
         {history.error && (

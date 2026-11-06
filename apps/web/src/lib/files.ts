@@ -3,8 +3,10 @@ import {
   type CreateJobRequest,
   createJobRequestSchema,
   DEFAULT_COMPRESSION_PRESET,
+  downloadFileName,
   imageFormats,
   type ImageType,
+  type JobSummary,
   MAX_INPUT_BYTES,
 } from '@onetodone/image-compressor-shared'
 
@@ -71,4 +73,14 @@ export function formatBytes(bytes: number): string {
 export function savedPercent(inputBytes: number, outputBytes: number): number {
   if (inputBytes <= 0 || outputBytes >= inputBytes) return 0
   return Math.round(((inputBytes - outputBytes) / inputBytes) * 100)
+}
+
+/**
+ * Returns the name the result of a finished job is saved under, the same one `GET /jobs/:id/download`
+ * gives it. A result type this version does not know keeps the original name.
+ * @param job finished job
+ */
+export function resultFileName(job: Pick<JobSummary, 'originalName' | 'inputType' | 'outputType'>): string {
+  const type = imageFormats.schema.safeParse(job.outputType ?? job.inputType)
+  return type.success ? downloadFileName(job.originalName, type.data) : job.originalName
 }

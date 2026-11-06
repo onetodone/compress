@@ -1,6 +1,6 @@
 # OneToDone Image Compressor
 
-Upload JPEG, PNG, WebP or AVIF images and download smaller versions in the same format. A background worker compresses each image with `sharp`, and the browser shows the result in real time with a before/after comparison, the size saved and a download link. Anonymous users get a small daily quota; signing in with Google raises it.
+Upload JPEG, PNG, WebP or AVIF images, one or many at once, and download smaller versions in the same format. A background worker compresses each image with `sharp`; every image appears in one list that updates in real time with its state, thumbnail and size saved. Download results one by one or all together as a ZIP. Anonymous users get a small daily quota; signing in with Google raises it.
 
 ## Stack
 
@@ -26,7 +26,7 @@ pnpm emulators   # in a separate terminal
 pnpm dev
 ```
 
-Open http://localhost:3000 and drop an image. The web app reads its `NEXT_PUBLIC_*` variables from the same root `.env`; with `NEXT_PUBLIC_USE_EMULATORS=true` it talks to the local emulators.
+Open http://localhost:3000 and drop one or more images. The web app reads its `NEXT_PUBLIC_*` variables from the same root `.env`; with `NEXT_PUBLIC_USE_EMULATORS=true` it talks to the local emulators.
 
 The API enqueues compression jobs in Redis (`REDIS_URL`, database 4 by default) and the worker consumes them; a job is retried with exponential backoff up to `QUEUE_MAX_ATTEMPTS` times. Integration tests use database 15 (`TEST_REDIS_URL`) and flush it.
 
