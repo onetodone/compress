@@ -77,13 +77,10 @@ interface ListToolbarProps {
   totals: UploadTotals | null
   /** Finished jobs in the list, in list order. */
   downloadable: readonly JobSummary[]
-  /** Number of uploads of this session that are no longer running. */
-  finished: number
-  onClearFinished: () => void
 }
 
 /** Progress of this session's uploads and actions on the whole list. */
-export function ListToolbar({ totals, downloadable, finished, onClearFinished }: ListToolbarProps) {
+export function ListToolbar({ totals, downloadable }: ListToolbarProps) {
   if (!totals && downloadable.length === 0) return null
   const saved = totals ? totals.inputBytes - totals.outputBytes : 0
   return (
@@ -106,11 +103,6 @@ export function ListToolbar({ totals, downloadable, finished, onClearFinished }:
         )}
       </p>
       <div className="flex flex-wrap items-start gap-2">
-        {finished > 0 && (
-          <button type="button" className={BUTTON} onClick={onClearFinished}>
-            Clear finished
-          </button>
-        )}
         {downloadable.length > 0 && <DownloadAll jobs={downloadable} />}
       </div>
     </div>
