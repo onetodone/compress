@@ -1,4 +1,12 @@
-import { formatBytes, imageFormats, type JobSummary, type Quota } from '@onetodone/compress-shared'
+import {
+  describeInputLimits,
+  fileFormats,
+  type FileType,
+  formatBytes,
+  type InputLimits,
+  type JobSummary,
+  type Quota,
+} from '@onetodone/compress-shared'
 
 import { jobExpiresAt, RESULT_LIFETIME_MS } from '../common/jobs/job-lifetime.js'
 import { encodeCallback } from './callback-data.js'
@@ -12,8 +20,8 @@ export const WORKING_REACTION = '👀'
 
 /** Commands shown in the Telegram menu. */
 export const BOT_COMMANDS = [
-  { command: 'my_images', description: 'Your images of the last 7 days' },
-  { command: 'quota', description: 'Images left today' },
+  { command: 'my_images', description: 'Your files of the last 7 days' },
+  { command: 'quota', description: 'Files left today' },
   { command: 'login', description: 'Sign in on the website' },
   { command: 'unlink', description: 'Disconnect from the website account' },
   { command: 'help', description: 'How it works' },
@@ -35,54 +43,73 @@ export interface BotMessage {
 /** Limits of the user that the texts mention. */
 export interface LimitsInfo {
   dailyJobs: number
-  maxInputBytes: number
+  /** Largest file by MIME type, for every type the user may send. */
+  inputLimits: InputLimits
 }
 
-const formats = () => imageFormats.names('and')
-
-/** Answer to `/start`. */
-export function startText(): string {
+/** Names the accepted formats for running text, e.g. `JPEG and PNG images and PDF documents`. */
+function formatsText(types: readonly FileType[]): string {
+  const images = types.filter((type) => fileFormats.info(type).kind === 'image')
+  const documents = types.filter((type) => fileFormats.info(type).kind === 'document')
   return [
-    `Hi! I make ${formats()} images smaller without visible loss of quality.`,
+    ...(images.length > 0 ? [`${fileFormats.names('and', images)} images`] : []),
+    ...(documents.length > 0 ? [`${fileFormats.names('and', documents)} documents`] : []),
+  ].join(' and ')
+}
+
+function acceptedTypes(inputLimits: InputLimits): FileType[] {
+  return fileFormats.types.filter((type) => inputLimits[type] !== undefined)
+}
+
+/**
+ * Answer to `/start`.
+ * @param inputLimits largest file by MIME type, for every type the user may send
+ */
+export function startText(inputLimits: InputLimits): string {
+  const types = acceptedTypes(inputLimits)
+  const documents = types.filter((type) => fileFormats.info(type).kind === 'document')
+  const what = documents.length > 0 ? `an image or a ${fileFormats.names('or', documents)}` : 'an image'
+  return [
+    `Hi! I make ${formatsText(types)} smaller without visible loss of quality.`,
     '',
-    'Send me an image as a file (📎 → File) and I will send the compressed file back.',
+    `Send me ${what} as a file (📎 → File) and I will send the compressed file back.`,
     '',
-    `/my_images — your images of the last ${LIFETIME_DAYS} days`,
-    '/quota — images left today',
+    `/my_images — your files of the last ${LIFETIME_DAYS} days`,
+    '/quota — files left today',
     '/login — sign in on the website with this Telegram account',
     '/help — how it works',
   ].join('\n')
 }
 
 /** Answer to `/help`. */
-export function helpText({ dailyJobs, maxInputBytes }: LimitsInfo): string {
+export function helpText({ dailyJobs, inputLimits }: LimitsInfo): string {
   return [
     'How it works:',
     '• Send an image as a file, not as a photo: Telegram recompresses photos and they lose quality. You can send several files at once.',
-    `• ${formats()} images up to ${formatBytes(maxInputBytes)} each.`,
-    '• The result keeps the format of the original. If an image cannot be made smaller, you get the original back.',
-    `• Up to ${dailyJobs} images per day; the day starts at 00:00 UTC. Images that fail do not count.`,
+    `• ${describeInputLimits(inputLimits)}.`,
+    '• The result keeps the format of the original. If a file cannot be made smaller, you get the original back.',
+    `• Up to ${dailyJobs} files per day; the day starts at 00:00 UTC. Files that fail do not count.`,
     '',
-    `/my_images lists your images of the last ${LIFETIME_DAYS} days, to download or delete them. Images are deleted automatically after ${LIFETIME_DAYS} days.`,
-    'Deleting an image removes it from the service; files already sent to this chat stay here.',
+    `/my_images lists your files of the last ${LIFETIME_DAYS} days, to download or delete them. Files are deleted automatically after ${LIFETIME_DAYS} days.`,
+    'Deleting a file removes it from the service; files already sent to this chat stay here.',
     '',
     'The website and this bot share one account: /login signs you in on the website, and "Connect Telegram" on the website links this chat to an account you already have there. /unlink disconnects them again.',
   ].join('\n')
 }
 
 /** Answer to `/quota`. */
-export function quotaText(quota: Quota, maxInputBytes: number, now: Date): string {
+export function quotaText(quota: Quota, inputLimits: InputLimits, now: Date): string {
   const left = Math.max(quota.limit - quota.used, 0)
   return [
-    `Today you have used ${quota.used} of ${quota.limit} images; ${left} left.`,
+    `Today you have used ${quota.used} of ${quota.limit} files; ${left} left.`,
     `The limit resets at 00:00 UTC, in ${untilNextUtcDay(now)}.`,
-    `Files up to ${formatBytes(maxInputBytes)}: ${imageFormats.names('or')}.`,
+    `Files: ${describeInputLimits(inputLimits)}.`,
   ].join('\n')
 }
 
 /** Reply to a file sent after the daily limit is used up. */
 export function dailyLimitText(limit: number, now: Date): string {
-  return `You have used all ${limit} images for today. The limit resets at 00:00 UTC, in ${untilNextUtcDay(now)}.`
+  return `You have used all ${limit} files for today. The limit resets at 00:00 UTC, in ${untilNextUtcDay(now)}.`
 }
 
 /** Reply to an image sent as a photo. */
@@ -90,19 +117,22 @@ export const PHOTO_TEXT =
   'Please send the image as a file (📎 → File) to keep its quality: Telegram recompresses images sent as photos.'
 
 /** Reply to plain text. */
-export const TEXT_HINT = 'Send me an image as a file to compress it. /help explains how.'
+export const TEXT_HINT = 'Send me a file to compress it. /help explains how.'
 
 /** Reply to an unexpected failure. */
 export const GENERIC_ERROR = 'Something went wrong. Please try again later.'
 
-/** Reply to a file of a type the service does not compress. */
-export function unsupportedText(): string {
-  return `I can only compress ${imageFormats.names('and')} images. Send one as a file.`
+/**
+ * Reply to a file of a type the service does not compress.
+ * @param inputLimits largest file by MIME type, for every type the user may send
+ */
+export function unsupportedText(inputLimits: InputLimits): string {
+  return `I can only compress ${formatsText(acceptedTypes(inputLimits))}. Send one as a file.`
 }
 
-/** Reply to a file above the user's size limit. */
-export function tooLargeText(maxInputBytes: number): string {
-  return `The file is too large: images can be at most ${formatBytes(maxInputBytes)}.`
+/** Reply to a file above the user's size limit for its type. */
+export function tooLargeText(type: FileType, maxBytes: number): string {
+  return `The file is too large: ${fileFormats.info(type).name} files can be at most ${formatBytes(maxBytes)}.`
 }
 
 /** Caption of a compressed result. */
@@ -117,7 +147,7 @@ export function resultCaption(job: JobSummary): string {
 
 /** Reply to a file whose job failed. */
 export function failureText(job: JobSummary, quotaRefunded: boolean): string {
-  const reason = (job.error ?? 'The image could not be processed').replace(/\.?$/, '.')
+  const reason = (job.error ?? 'The file could not be processed').replace(/\.?$/, '.')
   const quota = quotaRefunded ? ' It does not count against your daily limit.' : ''
   return `Could not compress ${job.originalName}. ${reason}${quota}`
 }
@@ -128,14 +158,14 @@ export function failureText(job: JobSummary, quotaRefunded: boolean): string {
  * @param total jobs the user has
  */
 export function imagesPage(jobs: JobSummary[], page: number, total: number, quota: Quota, now: Date): BotMessage {
-  const usage = `Today: ${quota.used} of ${quota.limit} images used.`
+  const usage = `Today: ${quota.used} of ${quota.limit} files used.`
   if (total === 0) {
-    return { text: `You have no images yet. Send me an image as a file to compress it.\n\n${usage}` }
+    return { text: `You have no files yet. Send me a file to compress it.\n\n${usage}` }
   }
 
   const pages = pageCount(total)
   const first = page * IMAGES_PAGE_SIZE + 1
-  const header = `Your images: ${total}${pages > 1 ? ` · page ${page + 1} of ${pages}` : ''}\n${usage}`
+  const header = `Your files: ${total}${pages > 1 ? ` · page ${page + 1} of ${pages}` : ''}\n${usage}`
   const entries = jobs.map((job, index) => `${first + index}. ${job.originalName}\n${jobLine(job, now)}`)
 
   const rows: InlineKeyboard = jobs.map((job, index) => {
@@ -179,7 +209,7 @@ function jobLine(job: JobSummary, now: Date): string {
     case 'processing':
       return 'Compressing…'
     case 'failed':
-      return `Failed: ${job.error ?? 'the image could not be processed.'}`
+      return `Failed: ${job.error ?? 'the file could not be processed.'}`
     case 'done':
       return `${sizes(job)} · ${timeLeft(jobExpiresAt(new Date(job.createdAt)), now)}`
     case 'unknown':
@@ -225,15 +255,15 @@ export const LINK_EXPIRED_TEXT =
 
 /** Reply when this Telegram account was connected to a website account. */
 export const LINKED_TEXT =
-  'Done: this Telegram account is connected to your website account. Images you send here appear on the website too, and the daily limit is shared.'
+  'Done: this Telegram account is connected to your website account. Files you send here appear on the website too, and the daily limit is shared.'
 
 /**
- * Reply when this Telegram account was connected to a website account and its earlier images moved there.
- * @param movedJobs images that moved
+ * Reply when this Telegram account was connected to a website account and its earlier files moved there.
+ * @param movedJobs files that moved
  */
 export function linkedWithImagesText(movedJobs: number): string {
-  const images = movedJobs === 1 ? '1 image' : `${movedJobs} images`
-  return `${LINKED_TEXT} The ${images} you sent here before moved there as well.`
+  const files = movedJobs === 1 ? '1 file' : `${movedJobs} files`
+  return `${LINKED_TEXT} The ${files} you sent here before moved there as well.`
 }
 
 /** Reply when this Telegram account was already connected to that website account. */
@@ -246,12 +276,12 @@ export const ALREADY_LINKED_TEXT = 'This Telegram account is already connected t
  * @param imagesMove whether those jobs move along; they stay with an account that has Google
  */
 export function linkQuestion(label: string | null, images: number, imagesMove: boolean, code: string): BotMessage {
-  const count = `${images} ${images === 1 ? 'image' : 'images'}`
+  const count = `${images} ${images === 1 ? 'file' : 'files'}`
   const lines = [
     label
       ? `Connect this Telegram account to the website account ${label}?`
       : 'Connect this Telegram account to the website account?',
-    'Images you send here will appear on the website, and the daily limit is shared. Only connect your own account.',
+    'Files you send here will appear on the website, and the daily limit is shared. Only connect your own account.',
   ]
   if (images > 0) {
     lines.push(
@@ -299,7 +329,7 @@ export function unlinkQuestion(): BotMessage {
   return {
     text: [
       'Disconnect this Telegram account from your account?',
-      'Your images stay with the account and remain available on the website when you sign in with Google. Images you send here afterwards go to a new, separate account.',
+      'Your files stay with the account and remain available on the website when you sign in with Google. Files you send here afterwards go to a new, separate account.',
     ].join('\n'),
     keyboard: [
       [
@@ -312,7 +342,7 @@ export function unlinkQuestion(): BotMessage {
 
 /** Reply when this Telegram account was disconnected. */
 export const UNLINKED_TEXT =
-  'Disconnected. Images you send now go to a new, separate account; the earlier ones stay available on the website.'
+  'Disconnected. Files you send now go to a new, separate account; the earlier ones stay available on the website.'
 
 /** Reply to a cancelled question. */
 export const CANCELLED_TEXT = 'Cancelled.'

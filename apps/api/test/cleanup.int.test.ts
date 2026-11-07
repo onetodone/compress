@@ -123,7 +123,7 @@ describe('stale job cleanup', () => {
 
       expect(await job('lostTask000000000000')).toMatchObject({
         status: 'failed',
-        error: 'The image could not be processed. Please try again later.',
+        error: 'The file could not be processed. Please try again later.',
         quotaRefunded: true,
       })
       expect(await jobsToday()).toBe(2)

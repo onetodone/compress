@@ -12,6 +12,7 @@ import { ImageCdn } from '../../src/common/cloudinary/image-cdn.js'
 import { ObjectStorage } from '../../src/common/r2/object-storage.js'
 import { TaskQueue } from '../../src/common/tasks/task-queue.js'
 import { WorkerModule } from '../../src/worker/worker.module.js'
+import type { ApiConfig } from '../../src/common/config/config.js'
 import { apiConfig, botConfig, workerConfig } from './config.js'
 import {
   InMemoryChatGateway,
@@ -33,13 +34,14 @@ export interface TestApiApp {
 /**
  * Creates the API against the emulators with in-memory replacements for R2, Cloudinary, the task
  * queue and the network counters.
+ * @param config configuration of the API; the test configuration by default
  */
-export async function createTestApiApp(): Promise<TestApiApp> {
+export async function createTestApiApp(config: ApiConfig = apiConfig): Promise<TestApiApp> {
   const storage = new InMemoryObjectStorage()
   const cdn = new InMemoryImageCdn()
   const tasks = new RecordingTaskQueue()
   const networks = new InMemoryNetworkQuota()
-  const moduleRef = await Test.createTestingModule({ imports: [ApiModule.register(apiConfig)] })
+  const moduleRef = await Test.createTestingModule({ imports: [ApiModule.register(config)] })
     .overrideProvider(ObjectStorage)
     .useValue(storage)
     .overrideProvider(ImageCdn)
@@ -50,7 +52,7 @@ export async function createTestApiApp(): Promise<TestApiApp> {
     .useValue(networks)
     .compile()
   const app = moduleRef.createNestApplication<NestExpressApplication>({ bufferLogs: true })
-  configureApiApp(configureApp(app), apiConfig)
+  configureApiApp(configureApp(app), config)
   await app.init()
   return { app, storage, cdn, tasks, networks }
 }

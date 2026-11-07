@@ -51,12 +51,18 @@ const quotaConfigSchema = z.object({
   QUOTA_ANONYMOUS_PER_IP_DAILY: z.coerce.number().int().min(0).default(20),
 })
 
+const ghostscriptConfigSchema = z.object({
+  // Ghostscript executable that compresses PDF files; without it, the API and the bot refuse them.
+  GHOSTSCRIPT_PATH: optional(required),
+})
+
 /** Environment variables of the public API. */
 export const apiConfigSchema = baseConfigSchema.extend({
   ...r2ConfigSchema.shape,
   ...cloudinaryConfigSchema.shape,
   ...queueConfigSchema.shape,
   ...quotaConfigSchema.shape,
+  ...ghostscriptConfigSchema.shape,
   CORS_ORIGINS: z
     .string()
     .transform((value) =>
@@ -77,6 +83,7 @@ export const workerConfigSchema = baseConfigSchema.extend({
   ...r2ConfigSchema.shape,
   ...cloudinaryConfigSchema.shape,
   ...queueConfigSchema.shape,
+  ...ghostscriptConfigSchema.shape,
   QUEUE_CONCURRENCY: z.coerce.number().int().min(1).default(2),
 })
 
@@ -86,6 +93,7 @@ export const botConfigSchema = baseConfigSchema.extend({
   ...cloudinaryConfigSchema.shape,
   ...queueConfigSchema.shape,
   ...quotaConfigSchema.shape,
+  ...ghostscriptConfigSchema.shape,
   TELEGRAM_BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/, 'Must look like <bot id>:<secret> as given by @BotFather'),
   // Origin of the web app, for login links; without it, /login answers that it is not available.
   WEB_APP_URL: optional(z.url().transform((url) => url.replace(/\/+$/, ''))),
@@ -101,6 +109,8 @@ export type CloudinaryConfig = z.infer<typeof cloudinaryConfigSchema>
 export type QueueConfig = z.infer<typeof queueConfigSchema>
 /** Daily job limits per user and per network. */
 export type QuotaConfig = z.infer<typeof quotaConfigSchema>
+/** Ghostscript executable for PDF compression, if it is enabled. */
+export type GhostscriptConfig = z.infer<typeof ghostscriptConfigSchema>
 /** Validated configuration of the API service. */
 export type ApiConfig = z.infer<typeof apiConfigSchema>
 /** Validated configuration of the worker service. */

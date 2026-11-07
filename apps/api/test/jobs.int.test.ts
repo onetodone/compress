@@ -15,6 +15,7 @@ import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
 import { createTestApiApp } from './support/app.js'
+import { apiConfig } from './support/config.js'
 import { clearFirestore, signInAnonymously, signUpWithEmail } from './support/emulators.js'
 import type {
   InMemoryImageCdn,
@@ -24,6 +25,7 @@ import type {
 } from './support/fakes.js'
 
 const photo = { originalName: 'photo.jpg', contentType: 'image/jpeg', size: 2048 }
+const MB = 1024 * 1024
 
 describe('jobs', () => {
   let app: NestExpressApplication
@@ -144,7 +146,7 @@ describe('jobs', () => {
     it.each([
       ['an unsupported type', { ...photo, contentType: 'image/gif' }],
       ['an unknown preset', { ...photo, settings: { preset: 'tiny' } }],
-      ['a file over 10 MB', { ...photo, size: MAX_INPUT_BYTES + 1 }],
+      ['a file over 20 MB', { ...photo, contentType: 'application/pdf', size: MAX_INPUT_BYTES + 1 }],
       ['a missing name', { contentType: 'image/png', size: 10 }],
       ['a name with a path', { ...photo, originalName: '../photo.jpg' }],
     ])('rejects %s', async (_case, body) => {
@@ -154,6 +156,35 @@ describe('jobs', () => {
         expect.arrayContaining([expect.objectContaining({ path: expect.any(String) })]),
       )
       expect(storage.presigned.size).toBe(0)
+    })
+
+    it('accepts images and PDF files up to 20 MB', async () => {
+      await http()
+        .post('/jobs')
+        .set(auth())
+        .send({ ...photo, size: 20 * MB })
+        .expect(201)
+      await http()
+        .post('/jobs')
+        .set(auth())
+        .send({ originalName: 'report.pdf', contentType: 'application/pdf', size: 20 * MB })
+        .expect(201)
+    })
+
+    it('refuses PDF files when PDF compression is off', async () => {
+      const imagesOnly = await createTestApiApp({ ...apiConfig, GHOSTSCRIPT_PATH: undefined })
+      try {
+        const response = await request(imagesOnly.app.getHttpServer())
+          .post('/jobs')
+          .set(auth())
+          .send({ originalName: 'report.pdf', contentType: 'application/pdf', size: 1024 })
+          .expect(400)
+
+        expect(response.body.message).toBe('PDF files are not supported')
+        expect(imagesOnly.storage.presigned.size).toBe(0)
+      } finally {
+        await imagesOnly.app.close()
+      }
     })
 
     it('refuses to create a job when the daily quota is used up', async () => {
@@ -194,7 +225,7 @@ describe('jobs', () => {
 
       storage.upload(key, { contentType: 'image/png' })
       await submit(jobId).expect(400)
-      storage.upload(key, { size: MAX_INPUT_BYTES + 1 })
+      storage.upload(key, { size: 20 * MB + 1 })
       await submit(jobId).expect(400)
 
       expect(await job(jobId)).toMatchObject({ status: 'awaiting_upload' })
@@ -534,7 +565,7 @@ describe('jobs', () => {
 
       const response = await download(jobId).expect(404)
 
-      expect(response.body).toMatchObject({ message: 'The image is no longer available' })
+      expect(response.body).toMatchObject({ message: 'The file is no longer available' })
     })
   })
 

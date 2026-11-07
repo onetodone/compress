@@ -1,7 +1,7 @@
-import { MAX_INPUT_BYTES } from '@onetodone/compress-shared'
+import { FILE_TYPES, fileFormats, type InputLimits, isImageType } from '@onetodone/compress-shared'
 
 import type { AuthUser } from '../auth/auth-user.js'
-import type { QuotaConfig } from '../config/config.js'
+import type { GhostscriptConfig, QuotaConfig } from '../config/config.js'
 
 /** Plan a user is on; every user is on `free` until paid plans exist. */
 export type Plan = 'free'
@@ -10,8 +10,11 @@ export type Plan = 'free'
 export interface Entitlements {
   /** Jobs per UTC day. */
   dailyJobs: number
-  /** Largest original image, in bytes; never above {@link MAX_INPUT_BYTES}. */
-  maxInputBytes: number
+  /**
+   * Largest original by MIME type, in bytes, for every type the user may upload; never above the
+   * format's `maxBytes`. PDF files are listed only when the service compresses them.
+   */
+  inputLimits: InputLimits
   /**
    * Whether the user's jobs also count against the daily limit of their client network. Only
    * anonymous sessions are, since anyone can start a fresh one; callers without a client address
@@ -26,13 +29,21 @@ export interface Entitlements {
  *
  * @param user the user's account
  * @param plan the user's plan
- * @param config configured quota limits
+ * @param config configured quota limits and whether PDF compression is enabled
  */
-export function entitlementsFor(user: Pick<AuthUser, 'kind'>, plan: Plan, config: QuotaConfig): Entitlements {
+export function entitlementsFor(
+  user: Pick<AuthUser, 'kind'>,
+  plan: Plan,
+  config: QuotaConfig & GhostscriptConfig,
+): Entitlements {
   const anonymous = user.kind === 'anonymous'
+  const inputLimits: InputLimits = {}
+  for (const type of FILE_TYPES) {
+    if (isImageType(type) || config.GHOSTSCRIPT_PATH) inputLimits[type] = fileFormats.info(type).maxBytes
+  }
   return {
     dailyJobs: anonymous ? config.QUOTA_ANONYMOUS_DAILY : config.QUOTA_SIGNED_IN_DAILY,
-    maxInputBytes: MAX_INPUT_BYTES,
+    inputLimits,
     networkLimited: anonymous && config.QUOTA_ANONYMOUS_PER_IP_DAILY > 0,
   }
 }

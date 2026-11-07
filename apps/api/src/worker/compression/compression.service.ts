@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { type CompressionPreset, type JobStatus, readJobSettings } from '@onetodone/compress-shared'
+import { type CompressionPreset, isImageType, type JobStatus, readJobSettings } from '@onetodone/compress-shared'
 import { type DocumentData, FieldValue, Firestore } from 'firebase-admin/firestore'
 
 import { ImageCdn } from '../../common/cloudinary/image-cdn.js'
@@ -9,10 +9,12 @@ import { resultKey } from '../../common/r2/object-keys.js'
 import { ObjectStorage } from '../../common/r2/object-storage.js'
 import { TaskQueue } from '../../common/tasks/task-queue.js'
 import { compressImage } from './compress-image.js'
+import { isPdf, PdfCompressor } from './compress-pdf.js'
+import type { CompressedFile } from './compressed-file.js'
 import { PermanentJobError } from './permanent-job-error.js'
 
 /** Error of a job whose compression did not succeed within the attempt limit. */
-export const RETRIES_EXHAUSTED = 'The image could not be processed. Please try again later.'
+export const RETRIES_EXHAUSTED = 'The file could not be processed. Please try again later.'
 
 /**
  * Result of one task attempt: the job was finished (`done`, `failed`), or there was nothing to do
@@ -41,6 +43,7 @@ export class CompressionService {
     private readonly storage: ObjectStorage,
     private readonly cdn: ImageCdn,
     private readonly tasks: TaskQueue,
+    private readonly pdf: PdfCompressor,
     private readonly timer: CallTimer,
   ) {}
 
@@ -68,7 +71,10 @@ export class CompressionService {
     try {
       return await this.compress(jobId, claim.job)
     } catch (error) {
-      if (error instanceof PermanentJobError) return this.fail(jobId, error.message)
+      if (error instanceof PermanentJobError) {
+        if (error.detail) this.logger.warn({ jobId, detail: error.detail }, `Compression refused: ${error.message}`)
+        return this.fail(jobId, error.message)
+      }
       if (attempt < maxAttempts) throw error
       this.logger.error({ jobId, attempt, err: error }, 'Compression failed on the last attempt')
       return this.fail(jobId, RETRIES_EXHAUSTED)
@@ -107,10 +113,11 @@ export class CompressionService {
     const original = await this.storage.get(job.inputKey)
     if (!original) throw new PermanentJobError('The uploaded file is no longer available')
 
-    const image = await compressImage(original, job.preset)
-    const outputKey = resultKey(job.ownerId, jobId, image.type)
-    await this.storage.put(outputKey, image.data, image.type)
-    const previewUrl = await this.cdn.upload(jobId, image.data)
+    const result = await this.compressFile(original, job.preset)
+    const outputKey = resultKey(job.ownerId, jobId, result.type)
+    await this.storage.put(outputKey, result.data, result.type)
+    // Previews are images; the web app shows an icon for documents.
+    const previewUrl = isImageType(result.type) ? await this.cdn.upload(jobId, result.data) : null
 
     const ref = this.ref(jobId)
     const outcome = await this.timer.measure('firestore', 'jobs.done', () =>
@@ -122,13 +129,13 @@ export class CompressionService {
         const now = FieldValue.serverTimestamp()
         tx.update(ref, {
           status: 'done' satisfies JobStatus,
-          inputType: image.type,
-          outputType: image.type,
+          inputType: result.type,
+          outputType: result.type,
           inputBytes: original.length,
           outputKey,
-          outputBytes: image.data.length,
-          width: image.width,
-          height: image.height,
+          outputBytes: result.data.length,
+          width: result.width,
+          height: result.height,
           previewUrl,
           error: null,
           updatedAt: now,
@@ -143,6 +150,11 @@ export class CompressionService {
     // The owner deleted the job while it was processing, after its files had been removed.
     await Promise.all([this.storage.delete(outputKey), this.cdn.delete(jobId)])
     return 'skipped'
+  }
+
+  /** Compresses a file into its own format, which is detected from the content. */
+  private compressFile(original: Buffer, preset: CompressionPreset): Promise<CompressedFile> {
+    return isPdf(original) ? this.pdf.compress(original, preset) : compressImage(original, preset)
   }
 
   /** Marks the job `failed` and gives its quota unit back; repeated deliveries never refund twice. */

@@ -91,7 +91,13 @@ describe('compressImage', () => {
   it('rejects image formats that are not supported', async () => {
     const gif = await sharp(fixture('photo.jpg')).gif().toBuffer()
 
-    await expect(compressImage(gif)).rejects.toThrow('Only JPEG, PNG, WebP and AVIF images are supported')
+    await expect(compressImage(gif)).rejects.toThrow('Only JPEG, PNG, WebP, AVIF and PDF files are supported')
+  })
+
+  it('rejects an image above the size limit of images', async () => {
+    const padded = Buffer.concat([fixture('photo.jpg'), Buffer.alloc(20 * 1024 * 1024)])
+
+    await expect(compressImage(padded)).rejects.toThrow('The image must be at most 20 MB')
   })
 
   it('rejects animated images instead of keeping only the first frame', async () => {

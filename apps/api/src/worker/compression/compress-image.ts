@@ -1,12 +1,14 @@
 import {
   type CompressionPreset,
   DEFAULT_COMPRESSION_PRESET,
+  fileFormats,
+  formatBytes,
   IMAGE_TYPES,
-  imageFormats,
   type ImageType,
 } from '@onetodone/compress-shared'
 import sharp, { type Metadata, type Sharp } from 'sharp'
 
+import type { CompressedFile } from './compressed-file.js'
 import { PermanentJobError } from './permanent-job-error.js'
 
 /**
@@ -64,16 +66,11 @@ const CODECS: Record<ImageType, Codec> = {
   }),
 }
 
-const INVALID_IMAGE = `The file is not a valid ${imageFormats.names('or')} image`
+const INVALID_IMAGE = `The file is not a valid ${fileFormats.names('or', IMAGE_TYPES)} image`
 
 /** Outcome of {@link compressImage}. */
-export interface CompressedImage {
-  /** Type detected from the file content; the result has the same type. */
+export interface CompressedImage extends CompressedFile {
   type: ImageType
-  /** Bytes to store as the result: the compressed image, or the original if compression did not help. */
-  data: Buffer
-  /** Whether `data` is the original because the compressed image was not smaller. */
-  keptOriginal: boolean
   width: number
   height: number
 }
@@ -83,7 +80,7 @@ export interface CompressedImage {
  * re-encodes at the quality of the preset.
  *
  * @throws PermanentJobError when the input is not a decodable, still image of a supported format
- *   within the pixel limit
+ *   within the size and pixel limits
  */
 export async function compressImage(
   input: Buffer,
@@ -95,7 +92,10 @@ export async function compressImage(
       throw new PermanentJobError(INVALID_IMAGE)
     })
   const type = IMAGE_TYPES.find((candidate) => CODECS[candidate].matches(metadata))
-  if (!type) throw new PermanentJobError(`Only ${imageFormats.names('and')} images are supported`)
+  if (!type) throw new PermanentJobError(`Only ${fileFormats.names('and')} files are supported`)
+  // A file declared as another format may have been uploaded under a higher size limit.
+  const { maxBytes } = fileFormats.info(type)
+  if (input.length > maxBytes) throw new PermanentJobError(`The image must be at most ${formatBytes(maxBytes)}`)
   // sharp reads only the first frame by default, so an animation would silently become a still image.
   if ((metadata.pages ?? 1) > 1) throw new PermanentJobError('Animated images are not supported')
   if (metadata.width * metadata.height > MAX_INPUT_PIXELS) {

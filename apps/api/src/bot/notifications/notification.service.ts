@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common'
-import { downloadFileName, imageTypeSchema, type JobSummary, toJobSummary } from '@onetodone/compress-shared'
+import { downloadFileName, fileTypeSchema, type JobSummary, toJobSummary } from '@onetodone/compress-shared'
 import { FieldValue, Firestore } from 'firebase-admin/firestore'
 
 import { awaitsChatAnswer, JOBS, readChatTarget } from '../../common/jobs/job-records.js'
@@ -92,6 +92,6 @@ export class NotificationService {
 
 /** Name of the result file: the original name with the extension of the result type. */
 function resultFileName(job: JobSummary): string {
-  const type = imageTypeSchema.safeParse(job.outputType ?? job.inputType)
+  const type = fileTypeSchema.safeParse(job.outputType ?? job.inputType)
   return type.success ? downloadFileName(job.originalName, type.data) : job.originalName
 }

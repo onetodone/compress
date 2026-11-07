@@ -12,6 +12,7 @@ import { createTestWorkerApp } from './support/app.js'
 import { clearFirestore } from './support/emulators.js'
 import type { InMemoryImageCdn, InMemoryObjectStorage } from './support/fakes.js'
 import { fixture } from './support/fixtures.js'
+import { ghostscriptAvailable } from './support/ghostscript.js'
 import { queueConfig, TEST_REDIS_URL } from './support/config.js'
 import { flushTestRedis } from './support/redis.js'
 
@@ -114,6 +115,29 @@ describe('compression task', () => {
     })
     expect(cdn.assets.get(JOB_ID)).toEqual(result!.data)
     expect(await jobsToday()).toBe(2)
+  })
+
+  it.runIf(ghostscriptAvailable)('compresses a queued PDF without a preview', async () => {
+    const original = fixture('document.pdf')
+    await queueJob(original, { originalName: 'report.pdf', inputType: 'application/pdf' })
+
+    expect(await deliver()).toBe('done')
+
+    const outputKey = `results/${UID}/${JOB_ID}.pdf`
+    const result = storage.objects.get(outputKey)
+    expect(result?.contentType).toBe('application/pdf')
+    expect(result!.size).toBeLessThan(original.length)
+    expect(await job()).toMatchObject({
+      status: 'done',
+      inputType: 'application/pdf',
+      outputType: 'application/pdf',
+      outputKey,
+      outputBytes: result!.size,
+      width: null,
+      height: null,
+      previewUrl: null,
+    })
+    expect(cdn.assets.has(JOB_ID)).toBe(false)
   })
 
   it('stores the type detected from the content, not the declared one', async () => {
@@ -350,7 +374,7 @@ describe('compression task', () => {
 
     expect(await job()).toMatchObject({
       status: 'failed',
-      error: 'The image could not be processed. Please try again later.',
+      error: 'The file could not be processed. Please try again later.',
       attempts: MAX_ATTEMPTS,
       quotaRefunded: true,
     })
