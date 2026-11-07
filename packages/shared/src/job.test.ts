@@ -37,7 +37,7 @@ describe('isTerminalJobStatus', () => {
 
 describe('inputTypeSchema', () => {
   it('accepts JPEG, PNG, WebP, AVIF and PDF', () => {
-    for (const type of ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'application/pdf']) {
+    for (const type of ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/heic', 'application/pdf']) {
       expect(inputTypeSchema.parse(type)).toBe(type)
     }
   })
@@ -45,7 +45,7 @@ describe('inputTypeSchema', () => {
   it('rejects other types', () => {
     expect(inputTypeSchema.safeParse('image/gif').success).toBe(false)
     expect(inputTypeSchema.safeParse('application/zip').success).toBe(false)
-    expect(inputTypeSchema.safeParse('image/heic').success).toBe(false)
+    expect(inputTypeSchema.safeParse('image/jxl').success).toBe(false)
   })
 })
 

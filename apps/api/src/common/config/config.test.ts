@@ -174,7 +174,7 @@ describe('parseConfig', () => {
     )
     expect(() => parseConfig(botConfigSchema, { ...botEnv, WEB_APP_URL: 'not a url' })).toThrow(/WEB_APP_URL/)
   })
-  it('reads the Ghostscript executable of every process and treats an empty value as unset', () => {
+  it('reads the compression tools of every process and treats empty values as unset', () => {
     const botEnv = { ...workerEnv, TELEGRAM_BOT_TOKEN: '1234567890:AAH-x_yZ0123456789abcdefghijklmnopq' }
     for (const [schema, env] of [
       [apiConfigSchema, apiEnv],
@@ -184,6 +184,9 @@ describe('parseConfig', () => {
       expect(parseConfig(schema, env).GHOSTSCRIPT_PATH).toBeUndefined()
       expect(parseConfig(schema, { ...env, GHOSTSCRIPT_PATH: '' }).GHOSTSCRIPT_PATH).toBeUndefined()
       expect(parseConfig(schema, { ...env, GHOSTSCRIPT_PATH: '/usr/bin/gs' }).GHOSTSCRIPT_PATH).toBe('/usr/bin/gs')
+      expect(parseConfig(schema, env).HEIF_TOOLS_DIR).toBeUndefined()
+      expect(parseConfig(schema, { ...env, HEIF_TOOLS_DIR: '' }).HEIF_TOOLS_DIR).toBeUndefined()
+      expect(parseConfig(schema, { ...env, HEIF_TOOLS_DIR: '/usr/bin' }).HEIF_TOOLS_DIR).toBe('/usr/bin')
     }
   })
 })

@@ -179,11 +179,19 @@ describe('telegram bot', () => {
       expect(job?.data()).toMatchObject({ status: 'queued', inputType: 'application/pdf', originalName: 'report.pdf' })
     })
 
+    it('accepts an HEIC file reported as HEIF', async () => {
+      chat.files.set('file-heic', fixture('photo.heic'))
+      await bot.document(document({ fileId: 'file-heic', fileName: 'IMG_1099.HEIC', mimeType: 'image/heif' }))
+
+      const [job] = await jobs()
+      expect(job?.data()).toMatchObject({ status: 'queued', inputType: 'image/heic', originalName: 'IMG_1099.HEIC' })
+    })
+
     it('refuses a file of another type without creating a job', async () => {
       await bot.document(document({ fileName: 'notes.zip', mimeType: 'application/zip' }))
 
       expect(lastText()).toBe(
-        'I can only compress JPEG, PNG, WebP and AVIF images and PDF documents. Send one as a file.',
+        'I can only compress JPEG, PNG, WebP, AVIF and HEIC images and PDF documents. Send one as a file.',
       )
       expect(chat.callsOf('message')[0]?.replyTo).toBe(MESSAGE_ID)
       expect(await jobs()).toHaveLength(0)

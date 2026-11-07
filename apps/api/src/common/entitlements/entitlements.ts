@@ -1,7 +1,13 @@
-import { FILE_TYPES, fileFormats, type InputLimits, isImageType } from '@onetodone/compress-shared'
+import { FILE_TYPES, fileFormats, type FileType, type InputLimits } from '@onetodone/compress-shared'
 
 import type { AuthUser } from '../auth/auth-user.js'
-import type { GhostscriptConfig, QuotaConfig } from '../config/config.js'
+import type { CompressionToolsConfig, QuotaConfig } from '../config/config.js'
+
+/** Formats compressed by an external tool, and the variable that enables it. */
+const TOOL_OF: Partial<Record<FileType, keyof CompressionToolsConfig>> = {
+  'image/heic': 'HEIF_TOOLS_DIR',
+  'application/pdf': 'GHOSTSCRIPT_PATH',
+}
 
 /** Plan a user is on; every user is on `free` until paid plans exist. */
 export type Plan = 'free'
@@ -12,7 +18,7 @@ export interface Entitlements {
   dailyJobs: number
   /**
    * Largest original by MIME type, in bytes, for every type the user may upload; never above the
-   * format's `maxBytes`. PDF files are listed only when the service compresses them.
+   * format's `maxBytes`. HEIC and PDF files are listed only when the service compresses them.
    */
   inputLimits: InputLimits
   /**
@@ -29,17 +35,18 @@ export interface Entitlements {
  *
  * @param user the user's account
  * @param plan the user's plan
- * @param config configured quota limits and whether PDF compression is enabled
+ * @param config configured quota limits and which external compression tools are enabled
  */
 export function entitlementsFor(
   user: Pick<AuthUser, 'kind'>,
   plan: Plan,
-  config: QuotaConfig & GhostscriptConfig,
+  config: QuotaConfig & CompressionToolsConfig,
 ): Entitlements {
   const anonymous = user.kind === 'anonymous'
   const inputLimits: InputLimits = {}
   for (const type of FILE_TYPES) {
-    if (isImageType(type) || config.GHOSTSCRIPT_PATH) inputLimits[type] = fileFormats.info(type).maxBytes
+    const tool = TOOL_OF[type]
+    if (!tool || config[tool]) inputLimits[type] = fileFormats.info(type).maxBytes
   }
   return {
     dailyJobs: anonymous ? config.QUOTA_ANONYMOUS_DAILY : config.QUOTA_SIGNED_IN_DAILY,

@@ -13,6 +13,7 @@ import { clearFirestore } from './support/emulators.js'
 import type { InMemoryImageCdn, InMemoryObjectStorage } from './support/fakes.js'
 import { fixture } from './support/fixtures.js'
 import { ghostscriptAvailable } from './support/ghostscript.js'
+import { heifToolsAvailable } from './support/heif.js'
 import { queueConfig, TEST_REDIS_URL } from './support/config.js'
 import { flushTestRedis } from './support/redis.js'
 
@@ -138,6 +139,28 @@ describe('compression task', () => {
       previewUrl: null,
     })
     expect(cdn.assets.has(JOB_ID)).toBe(false)
+  })
+
+  it.runIf(heifToolsAvailable)('compresses a queued HEIC image with a preview', async () => {
+    const original = fixture('photo.heic')
+    await queueJob(original, { originalName: 'IMG_1099.HEIC', inputType: 'image/heic' })
+
+    expect(await deliver()).toBe('done')
+
+    const outputKey = `results/${UID}/${JOB_ID}.heic`
+    const result = storage.objects.get(outputKey)
+    expect(result?.contentType).toBe('image/heic')
+    expect(result!.size).toBeLessThan(original.length)
+    expect(await job()).toMatchObject({
+      status: 'done',
+      inputType: 'image/heic',
+      outputType: 'image/heic',
+      outputKey,
+      width: 160,
+      height: 120,
+      previewUrl: expect.stringContaining(JOB_ID),
+    })
+    expect(cdn.assets.get(JOB_ID)).toEqual(result!.data)
   })
 
   it('stores the type detected from the content, not the declared one', async () => {
@@ -280,7 +303,7 @@ describe('compression task', () => {
 
     expect(await job()).toMatchObject({
       status: 'failed',
-      error: 'The file is not a valid JPEG, PNG, WebP or AVIF image',
+      error: 'The file is not a valid JPEG, PNG, WebP, AVIF or HEIC image',
       quotaRefunded: true,
       outputKey: null,
       finishedAt: expect.any(Timestamp),

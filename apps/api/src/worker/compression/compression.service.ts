@@ -8,6 +8,7 @@ import { CallTimer } from '../../common/logging/call-timer.js'
 import { resultKey } from '../../common/r2/object-keys.js'
 import { ObjectStorage } from '../../common/r2/object-storage.js'
 import { TaskQueue } from '../../common/tasks/task-queue.js'
+import { HeicEncoder } from './compress-heic.js'
 import { compressImage } from './compress-image.js'
 import { isPdf, PdfCompressor } from './compress-pdf.js'
 import type { CompressedFile } from './compressed-file.js'
@@ -44,6 +45,7 @@ export class CompressionService {
     private readonly cdn: ImageCdn,
     private readonly tasks: TaskQueue,
     private readonly pdf: PdfCompressor,
+    private readonly heic: HeicEncoder,
     private readonly timer: CallTimer,
   ) {}
 
@@ -154,7 +156,7 @@ export class CompressionService {
 
   /** Compresses a file into its own format, which is detected from the content. */
   private compressFile(original: Buffer, preset: CompressionPreset): Promise<CompressedFile> {
-    return isPdf(original) ? this.pdf.compress(original, preset) : compressImage(original, preset)
+    return isPdf(original) ? this.pdf.compress(original, preset) : compressImage(original, preset, this.heic)
   }
 
   /** Marks the job `failed` and gives its quota unit back; repeated deliveries never refund twice. */

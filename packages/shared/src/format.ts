@@ -14,6 +14,8 @@ export interface FileFormatInfo {
   extensions: readonly [string, ...string[]]
   /** Largest file of this format the service accepts from anyone, in bytes. */
   maxBytes: number
+  /** Other MIME types that browsers and apps report for files of this format. */
+  aliases?: readonly string[]
 }
 
 /** The MIME types of a format table whose formats are of one kind. */
@@ -38,6 +40,8 @@ export interface FileFormatRegistry<F extends Record<string, FileFormatInfo>> {
   accept(types?: readonly (keyof F & string)[]): string
   /** Returns the extension, without the dot, of files written in a format. */
   extension(type: keyof F & string): string
+  /** Returns the MIME type of a format for its MIME type or one of its aliases, if it is known. */
+  typeOfMimeType(mimeType: string): (keyof F & string) | undefined
   /** Returns the MIME type for a file extension (with or without the dot, any case), if it is known. */
   typeOfExtension(extension: string): (keyof F & string) | undefined
   /** Returns the MIME type for the extension of a file name, if it is known. */
@@ -66,6 +70,10 @@ export function defineFileFormats<const F extends Record<string, FileFormatInfo>
   for (const type of types) {
     for (const extension of info(type).extensions) byExtension.set(extension, type)
   }
+  const byMimeType = new Map<string, T>()
+  for (const type of types) {
+    for (const mimeType of [type, ...(info(type).aliases ?? [])]) byMimeType.set(mimeType, type)
+  }
   const typeOfExtension = (extension: string) => byExtension.get(extension.replace(/^\./, '').toLowerCase())
 
   return {
@@ -78,6 +86,7 @@ export function defineFileFormats<const F extends Record<string, FileFormatInfo>
       return [...selected, ...extensions].join(',')
     },
     extension: (type) => info(type).extensions[0],
+    typeOfMimeType: (mimeType) => byMimeType.get(mimeType.toLowerCase()),
     typeOfExtension,
     typeOfFileName(fileName) {
       const dot = fileName.lastIndexOf('.')
@@ -103,12 +112,19 @@ const FORMATS = {
   'image/png': { name: 'PNG', kind: 'image', extensions: ['png'], maxBytes: 20 * MB },
   'image/webp': { name: 'WebP', kind: 'image', extensions: ['webp'], maxBytes: 20 * MB },
   'image/avif': { name: 'AVIF', kind: 'image', extensions: ['avif'], maxBytes: 20 * MB },
+  'image/heic': {
+    name: 'HEIC',
+    kind: 'image',
+    extensions: ['heic', 'heif'],
+    maxBytes: 20 * MB,
+    aliases: ['image/heif'],
+  },
   'application/pdf': { name: 'PDF', kind: 'document', extensions: ['pdf'], maxBytes: 20 * MB },
 } as const satisfies Record<string, FileFormatInfo>
 
 /**
  * The file formats the service compresses. The output of a job always has the format of its input.
- * A server can turn PDF compression off; the API then refuses PDF files.
+ * A server can turn PDF and HEIC compression off; the API then refuses those files.
  */
 export const fileFormats = defineFileFormats(FORMATS)
 

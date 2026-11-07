@@ -2,7 +2,7 @@ import { HttpException, HttpStatus, Inject, Injectable, Logger } from '@nestjs/c
 import { type Quota, type QuotaErrorCode, utcDayKey } from '@onetodone/compress-shared'
 import { FieldValue, Firestore, type Transaction } from 'firebase-admin/firestore'
 
-import type { GhostscriptConfig, QuotaConfig } from '../config/config.js'
+import type { CompressionToolsConfig, QuotaConfig } from '../config/config.js'
 import { CONFIG } from '../config/config.module.js'
 import { type Entitlements, entitlementsFor } from '../entitlements/entitlements.js'
 import { CallTimer } from '../logging/call-timer.js'
@@ -35,7 +35,7 @@ export class QuotaService {
     private readonly firestore: Firestore,
     private readonly networks: NetworkQuota,
     private readonly timer: CallTimer,
-    @Inject(CONFIG) private readonly config: QuotaConfig & GhostscriptConfig,
+    @Inject(CONFIG) private readonly config: QuotaConfig & CompressionToolsConfig,
   ) {}
 
   /** Returns what the user may do: daily jobs, file types and sizes, and whether the network limit applies. */

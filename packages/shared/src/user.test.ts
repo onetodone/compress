@@ -18,7 +18,7 @@ describe('inputLimitsOf', () => {
     ).toEqual({ 'image/png': 10 * MB, 'application/pdf': 20 * MB })
   })
 
-  it('covers the image formats when the API lists no formats', () => {
+  it('covers the image formats of an API that lists no formats', () => {
     expect(inputLimitsOf({ maxInputBytes: 10 * MB })).toEqual({
       'image/jpeg': 10 * MB,
       'image/png': 10 * MB,

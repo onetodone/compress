@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { fileTypeSchema, IMAGE_TYPES, type InputLimits } from './format.js'
+import { fileTypeSchema, type ImageType, type InputLimits } from './format.js'
 import { telegramStatusSchema } from './telegram.js'
 
 /** Validates the daily quota of a user. */
@@ -40,22 +40,25 @@ export type FormatLimit = z.infer<typeof formatLimitSchema>
 export const userLimitsSchema = z.object({
   /** Largest original image the user may upload, in bytes; for clients that do not read `formats`. */
   maxInputBytes: z.number().int().positive(),
-  /** Every format the user may upload, with its size limit. Absent from older APIs, which accept images only. */
+  /** Every format the user may upload, with its size limit. Absent from older APIs, which accept JPEG, PNG, WebP and AVIF only. */
   formats: z.array(formatLimitSchema).optional(),
 })
+
+/** The formats of an API that does not list `formats`. */
+const LEGACY_IMAGE_TYPES: readonly ImageType[] = ['image/jpeg', 'image/png', 'image/webp', 'image/avif']
 
 /** Per-file limits of a user. */
 export type UserLimits = z.infer<typeof userLimitsSchema>
 
 /**
  * Returns the formats a user may upload and their size limits, leaving out formats this version
- * does not know. Limits from an API without `formats` cover the image formats.
+ * does not know. Limits from an API without `formats` cover the image formats such an API accepts.
  * @param limits `limits` of `GET /me`
  */
 export function inputLimitsOf(limits: UserLimits): InputLimits {
   const result: InputLimits = {}
   if (!limits.formats) {
-    for (const type of IMAGE_TYPES) result[type] = limits.maxInputBytes
+    for (const type of LEGACY_IMAGE_TYPES) result[type] = limits.maxInputBytes
     return result
   }
   for (const { type, maxBytes } of limits.formats) {

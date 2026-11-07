@@ -15,6 +15,7 @@ const IMAGE_LIMITS = [
   { type: 'image/png', maxBytes: 20 * MB },
   { type: 'image/webp', maxBytes: 20 * MB },
   { type: 'image/avif', maxBytes: 20 * MB },
+  { type: 'image/heic', maxBytes: 20 * MB },
 ]
 const LIMITS = { maxInputBytes: 20 * MB, formats: [...IMAGE_LIMITS, { type: 'application/pdf', maxBytes: 20 * MB }] }
 
@@ -110,6 +111,29 @@ describe('GET /me', () => {
       expect(response.body.limits).toEqual({ maxInputBytes: 20 * MB, formats: IMAGE_LIMITS })
     } finally {
       await imagesOnly.close()
+    }
+  })
+
+  it('leaves HEIC out when HEIC compression is off', async () => {
+    const withoutHeic = await createApiApp({ ...apiConfig, HEIF_TOOLS_DIR: undefined })
+    await withoutHeic.init()
+    const { token } = await signInAnonymously()
+
+    try {
+      const response = await request(withoutHeic.getHttpServer())
+        .get('/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+      expect(response.body.limits.formats.map(({ type }: { type: string }) => type)).toEqual([
+        'image/jpeg',
+        'image/png',
+        'image/webp',
+        'image/avif',
+        'application/pdf',
+      ])
+      expect(response.body.limits.maxInputBytes).toBe(20 * MB)
+    } finally {
+      await withoutHeic.close()
     }
   })
 

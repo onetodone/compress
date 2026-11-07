@@ -51,9 +51,12 @@ const quotaConfigSchema = z.object({
   QUOTA_ANONYMOUS_PER_IP_DAILY: z.coerce.number().int().min(0).default(20),
 })
 
-const ghostscriptConfigSchema = z.object({
+const compressionToolsConfigSchema = z.object({
   // Ghostscript executable that compresses PDF files; without it, the API and the bot refuse them.
   GHOSTSCRIPT_PATH: optional(required),
+  // Directory with heif-dec and heif-enc of libheif, which compress HEIC files; without it, the API
+  // and the bot refuse them.
+  HEIF_TOOLS_DIR: optional(required),
 })
 
 /** Environment variables of the public API. */
@@ -62,7 +65,7 @@ export const apiConfigSchema = baseConfigSchema.extend({
   ...cloudinaryConfigSchema.shape,
   ...queueConfigSchema.shape,
   ...quotaConfigSchema.shape,
-  ...ghostscriptConfigSchema.shape,
+  ...compressionToolsConfigSchema.shape,
   CORS_ORIGINS: z
     .string()
     .transform((value) =>
@@ -83,7 +86,7 @@ export const workerConfigSchema = baseConfigSchema.extend({
   ...r2ConfigSchema.shape,
   ...cloudinaryConfigSchema.shape,
   ...queueConfigSchema.shape,
-  ...ghostscriptConfigSchema.shape,
+  ...compressionToolsConfigSchema.shape,
   QUEUE_CONCURRENCY: z.coerce.number().int().min(1).default(2),
 })
 
@@ -93,7 +96,7 @@ export const botConfigSchema = baseConfigSchema.extend({
   ...cloudinaryConfigSchema.shape,
   ...queueConfigSchema.shape,
   ...quotaConfigSchema.shape,
-  ...ghostscriptConfigSchema.shape,
+  ...compressionToolsConfigSchema.shape,
   TELEGRAM_BOT_TOKEN: z.string().regex(/^\d+:[\w-]+$/, 'Must look like <bot id>:<secret> as given by @BotFather'),
   // Origin of the web app, for login links; without it, /login answers that it is not available.
   WEB_APP_URL: optional(z.url().transform((url) => url.replace(/\/+$/, ''))),
@@ -109,8 +112,8 @@ export type CloudinaryConfig = z.infer<typeof cloudinaryConfigSchema>
 export type QueueConfig = z.infer<typeof queueConfigSchema>
 /** Daily job limits per user and per network. */
 export type QuotaConfig = z.infer<typeof quotaConfigSchema>
-/** Ghostscript executable for PDF compression, if it is enabled. */
-export type GhostscriptConfig = z.infer<typeof ghostscriptConfigSchema>
+/** External tools of the formats `sharp` cannot compress: set for each format that is enabled. */
+export type CompressionToolsConfig = z.infer<typeof compressionToolsConfigSchema>
 /** Validated configuration of the API service. */
 export type ApiConfig = z.infer<typeof apiConfigSchema>
 /** Validated configuration of the worker service. */
