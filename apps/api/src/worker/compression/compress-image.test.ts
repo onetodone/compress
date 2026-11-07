@@ -3,6 +3,8 @@ import sharp from 'sharp'
 import { describe, expect, it } from 'vitest'
 
 import { fixture, type FixtureName } from '../../../test/support/fixtures.js'
+import { HEIF_TOOLS_DIR, heifToolsAvailable } from '../../../test/support/heif.js'
+import { LibheifHeicEncoder } from './compress-heic.js'
 import { compressImage, MAX_INPUT_PIXELS } from './compress-image.js'
 import { PermanentJobError } from './permanent-job-error.js'
 
@@ -84,14 +86,14 @@ describe('compressImage', () => {
 
   it('rejects bytes that are not an image', async () => {
     await expect(compressImage(Buffer.from('not an image'))).rejects.toThrow(
-      'The file is not a valid JPEG, PNG, WebP or AVIF image',
+      'The file is not a valid JPEG, PNG, WebP, AVIF or HEIC image',
     )
   })
 
   it('rejects image formats that are not supported', async () => {
     const gif = await sharp(fixture('photo.jpg')).gif().toBuffer()
 
-    await expect(compressImage(gif)).rejects.toThrow('Only JPEG, PNG, WebP, AVIF and PDF files are supported')
+    await expect(compressImage(gif)).rejects.toThrow('Only JPEG, PNG, WebP, AVIF, HEIC and PDF files are supported')
   })
 
   it('rejects an image above the size limit of images', async () => {
@@ -119,5 +121,39 @@ describe('compressImage', () => {
       .toBuffer()
 
     await expect(compressImage(huge)).rejects.toThrow('too many pixels')
+  })
+
+  it('refuses HEIC images without an HEIC encoder', async () => {
+    await expect(compressImage(fixture('photo.heic'))).rejects.toThrow('HEIC compression is not available')
+  })
+
+  describe.runIf(heifToolsAvailable)('with the libheif tools', () => {
+    const heic = new LibheifHeicEncoder(HEIF_TOOLS_DIR!)
+
+    it.each(COMPRESSION_PRESETS)('compresses HEIC into a smaller HEIC with the %s preset', async (preset) => {
+      const input = fixture('photo.heic')
+
+      const result = await compressImage(input, preset, heic)
+
+      expect(result).toMatchObject({ type: 'image/heic', keptOriginal: false, width: 160, height: 120 })
+      expect(result.data.length).toBeLessThan(input.length)
+      const metadata = await sharp(result.data).metadata()
+      expect(metadata).toMatchObject({ format: 'heif', compression: 'hevc' })
+      expect(metadata.exif).toBeUndefined()
+    })
+
+    it('makes smaller HEIC files with the smaller preset', async () => {
+      const balanced = await compressImage(fixture('photo.heic'), 'balanced', heic)
+      const smaller = await compressImage(fixture('photo.heic'), 'smaller', heic)
+
+      expect(smaller.data.length).toBeLessThan(balanced.data.length)
+    })
+
+    it('applies the rotation stored in an HEIC file once', async () => {
+      const result = await compressImage(fixture('rotated.heic'), 'balanced', heic)
+
+      expect(result).toMatchObject({ width: 32, height: 64 })
+      expect((await sharp(result.data).metadata()).autoOrient).toEqual({ width: 32, height: 64 })
+    })
   })
 })

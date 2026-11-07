@@ -20,10 +20,7 @@ export type CheckedFile = { ok: true; request: CreateJobRequest } | { ok: false;
  * @param file file metadata as the browser reports it
  */
 export function fileTypeOf(file: Pick<File, 'name' | 'type'>): FileType | undefined {
-  if (file.type !== '') {
-    const declared = fileFormats.schema.safeParse(file.type)
-    return declared.success ? declared.data : undefined
-  }
+  if (file.type !== '') return fileFormats.typeOfMimeType(file.type)
   return fileFormats.typeOfFileName(file.name)
 }
 

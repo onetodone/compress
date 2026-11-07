@@ -12,7 +12,6 @@ import {
   DEFAULT_COMPRESSION_PRESET,
   fileFormats,
   type FileType,
-  fileTypeSchema,
   type InputLimits,
   TELEGRAM_LOGIN_FRAGMENT,
 } from '@onetodone/compress-shared'
@@ -364,8 +363,8 @@ function linkOutcomeText({ outcome, movedJobs }: LinkResult): string {
 
 /** The file type of a document: its declared MIME type, or its extension when the type is unknown. */
 function fileTypeOf({ mimeType, fileName }: IncomingDocument): FileType | undefined {
-  const declared = fileTypeSchema.safeParse(mimeType)
-  if (declared.success) return declared.data
+  const declared = mimeType ? fileFormats.typeOfMimeType(mimeType) : undefined
+  if (declared) return declared
   return fileName ? fileFormats.typeOfFileName(fileName) : undefined
 }
 

@@ -9,12 +9,14 @@ const config = {
   QUOTA_SIGNED_IN_DAILY: 30,
   QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
   GHOSTSCRIPT_PATH: 'gs',
+  HEIF_TOOLS_DIR: '/usr/bin',
 }
 const allTypes = {
   'image/jpeg': 20 * MB,
   'image/png': 20 * MB,
   'image/webp': 20 * MB,
   'image/avif': 20 * MB,
+  'image/heic': 20 * MB,
   'application/pdf': 20 * MB,
 }
 
@@ -44,7 +46,13 @@ describe('entitlementsFor', () => {
   it('accepts only images when PDF compression is off', () => {
     const { inputLimits } = entitlementsFor({ kind: 'registered' }, 'free', { ...config, GHOSTSCRIPT_PATH: undefined })
 
-    expect(Object.keys(inputLimits)).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+    expect(Object.keys(inputLimits)).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'image/heic'])
+  })
+
+  it('refuses HEIC files when HEIC compression is off', () => {
+    const { inputLimits } = entitlementsFor({ kind: 'registered' }, 'free', { ...config, HEIF_TOOLS_DIR: undefined })
+
+    expect(Object.keys(inputLimits)).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'application/pdf'])
   })
 
   it('never allows files above the ceiling of their format', () => {

@@ -40,14 +40,14 @@ describe('archiveResults', () => {
       job('j2', 'holiday.jpg'),
       job('j3', 'scan.jpg', 'image/png'),
       job('j4', 'icon.webp', null),
-      job('j5', 'future.heic', 'image/heic'),
+      job('j5', 'future.jxl', 'image/jxl'),
     ]
     jobs[3]!.inputType = 'image/webp'
     const progress: number[] = []
     const { zip, failed } = await archiveResults(jobs, source(), (handled) => progress.push(handled))
 
     const files = unzipSync(zip!)
-    expect(Object.keys(files)).toEqual(['holiday.jpg', 'holiday (2).jpg', 'scan.png', 'icon.webp', 'future.heic'])
+    expect(Object.keys(files)).toEqual(['holiday.jpg', 'holiday (2).jpg', 'scan.png', 'icon.webp', 'future.jxl'])
     expect(strFromU8(files['holiday (2).jpg']!)).toBe('bytes of j2')
     expect(failed).toBe(0)
     expect(progress.at(-1)).toBe(5)

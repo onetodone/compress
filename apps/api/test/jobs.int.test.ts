@@ -158,7 +158,12 @@ describe('jobs', () => {
       expect(storage.presigned.size).toBe(0)
     })
 
-    it('accepts images and PDF files up to 20 MB', async () => {
+    it('accepts images, HEIC and PDF files up to 20 MB', async () => {
+      await http()
+        .post('/jobs')
+        .set(auth())
+        .send({ originalName: 'IMG_1099.HEIC', contentType: 'image/heic', size: 20 * MB })
+        .expect(201)
       await http()
         .post('/jobs')
         .set(auth())
@@ -184,6 +189,22 @@ describe('jobs', () => {
         expect(imagesOnly.storage.presigned.size).toBe(0)
       } finally {
         await imagesOnly.app.close()
+      }
+    })
+
+    it('refuses HEIC files when HEIC compression is off', async () => {
+      const withoutHeic = await createTestApiApp({ ...apiConfig, HEIF_TOOLS_DIR: undefined })
+      try {
+        const response = await request(withoutHeic.app.getHttpServer())
+          .post('/jobs')
+          .set(auth())
+          .send({ originalName: 'IMG_1099.HEIC', contentType: 'image/heic', size: 1024 })
+          .expect(400)
+
+        expect(response.body.message).toBe('HEIC files are not supported')
+        expect(withoutHeic.storage.presigned.size).toBe(0)
+      } finally {
+        await withoutHeic.app.close()
       }
     })
 

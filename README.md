@@ -1,6 +1,6 @@
 # Compress OneToDone
 
-Upload JPEG, PNG, WebP or AVIF images and PDF documents, one or many at once, and download smaller versions in the same format. A background worker compresses each image with `sharp` and each PDF with Ghostscript; every file appears in one list that updates in real time with its state, thumbnail and size saved. Download results one by one or all together as a ZIP. Anonymous users get a small daily quota; signing in with Google raises it.
+Upload JPEG, PNG, WebP, AVIF or HEIC images and PDF documents, one or many at once, and download smaller versions in the same format. A background worker compresses each image with `sharp` (HEIC with the libheif tools) and each PDF with Ghostscript; every file appears in one list that updates in real time with its state, thumbnail and size saved. Download results one by one or all together as a ZIP. Anonymous users get a small daily quota; signing in with Google raises it.
 
 ## Stack
 
@@ -17,6 +17,7 @@ Upload JPEG, PNG, WebP or AVIF images and PDF documents, one or many at once, an
 - Java 21 for the Firebase emulators (the Firebase CLI is a dev dependency)
 - Redis 7 or later on `127.0.0.1:6379` (job queue)
 - Ghostscript for PDF compression (`apt install ghostscript`); optional: with `GHOSTSCRIPT_PATH` empty, PDF files are refused
+- The libheif tools for HEIC compression (`apt install libheif-examples libheif-plugin-libde265 libheif-plugin-x265`); optional: with `HEIF_TOOLS_DIR` empty, HEIC files are refused
 
 ## Getting started
 
@@ -37,7 +38,7 @@ Uploads go to a real Cloudflare R2 bucket: fill in the `R2_*` variables in `.env
 
 ### Compressing a file
 
-1. `POST /jobs` with `{ "originalName", "contentType", "size", "settings": { "preset" } }` returns `jobId` and a presigned `uploadUrl`, valid for 10 minutes. `contentType` is `image/jpeg`, `image/png`, `image/webp`, `image/avif` or, when PDF compression is on, `application/pdf`, each up to 20 MB; `GET /me` lists the accepted types and limits in `limits.formats`. `preset` is `balanced` (default) or `smaller`; for PDF files it downsamples images to 150 or 100 dpi.
+1. `POST /jobs` with `{ "originalName", "contentType", "size", "settings": { "preset" } }` returns `jobId` and a presigned `uploadUrl`, valid for 10 minutes. `contentType` is `image/jpeg`, `image/png`, `image/webp`, `image/avif` or, when HEIC or PDF compression is on, `image/heic` or `application/pdf`, each up to 20 MB; `GET /me` lists the accepted types and limits in `limits.formats`. `preset` is `balanced` (default) or `smaller`; for PDF files it downsamples images to 150 or 100 dpi.
 2. `PUT` the file to `uploadUrl` with the same `Content-Type`. R2 rejects a body whose type or size differs from the declared one.
 3. `POST /jobs/:id/submit` checks the upload, counts the job against the daily quota and queues it for compression. Daily limits come from `QUOTA_*` variables; anonymous jobs are also limited per client network (IPv4 address or IPv6 /64), so new anonymous sessions do not add free jobs without bound. The API takes the client address from `X-Forwarded-For` only when the request comes from a proxy on the same host.
 4. The browser follows `jobs/{jobId}` in Firestore until the job is `done` or `failed`. `GET /jobs?limit=&cursor=` lists the user's jobs, newest first.
@@ -60,7 +61,7 @@ Uploads go to a real Cloudflare R2 bucket: fill in the `R2_*` variables in `.env
 
 ## Deployment
 
-- **API and worker:** built from the repository on a Linux server and run as two services (`node dist/main.api.js`, `node dist/main.worker.js`) behind a reverse proxy, with Redis on the same host. PDF compression needs the `ghostscript` package on the server and `GHOSTSCRIPT_PATH` set; the worker refuses to start when the configured executable cannot be run. Every variable is described in `.env.example`; in production `firebase-admin` reads a service account key with `roles/datastore.user` through `GOOGLE_APPLICATION_CREDENTIALS`, and `METADATA_SERVER_DETECTION=none` skips the Google Cloud metadata lookup.
+- **API and worker:** built from the repository on a Linux server and run as two services (`node dist/main.api.js`, `node dist/main.worker.js`) behind a reverse proxy, with Redis on the same host. PDF compression needs the `ghostscript` package on the server and `GHOSTSCRIPT_PATH` set, HEIC compression the libheif tools and `HEIF_TOOLS_DIR` set; the worker refuses to start when a configured tool cannot be run. Every variable is described in `.env.example`; in production `firebase-admin` reads a service account key with `roles/datastore.user` through `GOOGLE_APPLICATION_CREDENTIALS`, and `METADATA_SERVER_DETECTION=none` skips the Google Cloud metadata lookup.
 - **Web app:** static export on Firebase Hosting (`infra/firebase.json`). Firebase serves only files inside the config's directory, so the export in `apps/web/out` is copied to `infra/hosting` before `firebase deploy --only hosting`.
 - **Auth:** anonymous and Google providers enabled. Google sign-in uses a popup on `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`; set it to the web app's own Hosting domain so the sign-in handler is same-origin, list that domain under Auth's authorized domains, and add `https://<web domain>/__/auth/handler` to the redirect URIs of the OAuth web client.
 - **Firestore:** `firebase deploy --only firestore:rules,firestore:indexes --config infra/firebase.json --project <project>`.
@@ -75,7 +76,7 @@ Uploads go to a real Cloudflare R2 bucket: fill in the `R2_*` variables in `.env
 
 ## Docker
 
-`apps/api/Dockerfile` builds one image for both services, with Ghostscript installed and `GHOSTSCRIPT_PATH=gs`. It starts the API by default; the worker runs with `node dist/main.worker.js`.
+`apps/api/Dockerfile` builds one image for both services, with Ghostscript and the libheif tools installed, `GHOSTSCRIPT_PATH=gs` and `HEIF_TOOLS_DIR=/usr/bin`. It starts the API by default; the worker runs with `node dist/main.worker.js`.
 
 ```bash
 docker compose up --build
