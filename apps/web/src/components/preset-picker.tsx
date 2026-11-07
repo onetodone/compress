@@ -15,7 +15,7 @@ interface PresetPickerProps {
 
 export function PresetPicker({ value, disabled, onChange }: PresetPickerProps) {
   return (
-    <fieldset disabled={disabled} className="flex flex-col gap-1.5">
+    <fieldset disabled={disabled} className="flex flex-col items-start gap-1.5">
       <legend className="sr-only">Compression</legend>
       <div className="inline-flex rounded-full border border-zinc-300 p-0.5 dark:border-zinc-700">
         {COMPRESSION_PRESETS.map((preset) => (

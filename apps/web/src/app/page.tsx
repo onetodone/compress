@@ -106,13 +106,11 @@ function Workspace({ user }: { user: SessionUser }) {
   const history = useJobHistory(user.uid)
   const { uploads, addFiles, removeUploads } = useUploads()
   const [preset, setPreset] = useState<CompressionPreset>(DEFAULT_COMPRESSION_PRESET)
-  // Jobs cleared from the list stay hidden even when a later history page contains them.
-  const [hidden, setHidden] = useState<ReadonlySet<string>>(new Set())
 
   const earlierJobs = useMemo(() => {
     const sessionJobIds = new Set(uploads.flatMap((upload) => (upload.jobId ? [upload.jobId] : [])))
-    return history.jobs.filter((job) => !sessionJobIds.has(job.id) && !hidden.has(job.id))
-  }, [uploads, history.jobs, hidden])
+    return history.jobs.filter((job) => !sessionJobIds.has(job.id))
+  }, [uploads, history.jobs])
 
   const entries = useMemo<LiveJobEntry[]>(
     () => [
@@ -138,21 +136,9 @@ function Workspace({ user }: { user: SessionUser }) {
     const job = item.jobId ? live.jobs.get(item.jobId) : undefined
     return job?.status === 'done' ? [job] : []
   })
-  const finishedKeys = new Set(
-    uploads
-      .filter((upload) => isFinished(upload, upload.jobId ? live.jobs.get(upload.jobId) : undefined))
-      .map((upload) => upload.key),
-  )
-
   function removeItem(item: ListItem) {
     if (item.upload) removeUploads(new Set([item.upload.key]))
     if (item.jobId) history.removeJob(item.jobId)
-  }
-
-  function clearFinished() {
-    const jobIds = uploads.flatMap((upload) => (finishedKeys.has(upload.key) && upload.jobId ? [upload.jobId] : []))
-    setHidden((current) => new Set([...current, ...jobIds]))
-    removeUploads(finishedKeys)
   }
 
   const remaining = quota === null ? null : networkLimitReached ? 0 : Math.max(quota.limit - quota.used, 0)
@@ -184,12 +170,7 @@ function Workspace({ user }: { user: SessionUser }) {
         <h2 id="images-heading" className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
           Your images
         </h2>
-        <ListToolbar
-          totals={uploadTotals(uploads, live.jobs)}
-          downloadable={downloadable}
-          finished={finishedKeys.size}
-          onClearFinished={clearFinished}
-        />
+        <ListToolbar totals={uploadTotals(uploads, live.jobs)} downloadable={downloadable} />
         {items.map((item) => (
           <JobCard
             key={item.key}

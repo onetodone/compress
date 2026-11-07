@@ -2,7 +2,7 @@
 
 import { type AccountKind, formatBytes, type JobSummary, type JobSummaryStatus } from '@onetodone/compress-shared'
 import Image from 'next/image'
-import { type ReactNode, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react'
 
 import { useResultUrl } from '@/hooks/use-result-url'
 import type { Upload } from '@/hooks/use-uploads'
@@ -33,10 +33,95 @@ function actionError(error: unknown): string {
   return error instanceof ApiError ? error.message : 'Something went wrong. Try again.'
 }
 
+const ICON_BUTTON =
+  'inline-flex size-8 items-center justify-center rounded-full border border-zinc-300 text-zinc-700 hover:bg-zinc-100 disabled:cursor-not-allowed disabled:opacity-50 dark:border-zinc-700 dark:text-zinc-300 dark:hover:bg-zinc-800'
+
+const DANGER_ICON_BUTTON = `${ICON_BUTTON} hover:border-red-300 hover:bg-red-50 hover:text-red-600 dark:hover:border-red-900 dark:hover:bg-red-950 dark:hover:text-red-400`
+
+function Icon({ d, spin = false }: { d: string; spin?: boolean }) {
+  return (
+    <svg
+      aria-hidden
+      viewBox="0 0 24 24"
+      className={`size-4 ${spin ? 'animate-spin' : ''}`}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth={1.75}
+      strokeLinecap="round"
+      strokeLinejoin="round"
+    >
+      <path d={d} />
+    </svg>
+  )
+}
+
+const ICONS = {
+  download: 'M12 4v11m0 0-4-4m4 4 4-4M5 20h14',
+  delete: 'M4 7h16M10 11v6m4-6v6M6 7l1 12a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2l1-12M9 7V5a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2',
+  busy: 'M12 3a9 9 0 1 0 9 9',
+}
+
+/** Asks before a deletion, next to the button that opened it; Escape or a click outside cancels. */
+function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCancel: (restoreFocus: boolean) => void }) {
+  const textId = useId()
+  const panel = useRef<HTMLDivElement>(null)
+  const confirmButton = useRef<HTMLButtonElement>(null)
+
+  useEffect(() => {
+    confirmButton.current?.focus()
+    function onPointerDown(event: PointerEvent) {
+      if (!panel.current?.contains(event.target as Node)) onCancel(false)
+    }
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === 'Escape') onCancel(true)
+    }
+    document.addEventListener('pointerdown', onPointerDown)
+    document.addEventListener('keydown', onKeyDown)
+    return () => {
+      document.removeEventListener('pointerdown', onPointerDown)
+      document.removeEventListener('keydown', onKeyDown)
+    }
+  }, [onCancel])
+
+  return (
+    <div
+      ref={panel}
+      role="alertdialog"
+      aria-label="Delete image"
+      aria-describedby={textId}
+      className="absolute top-full right-0 z-10 mt-2 flex w-60 flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
+    >
+      <p id={textId} className="text-sm">
+        Delete this image and its compressed version?
+      </p>
+      <div className="flex justify-end gap-2">
+        <button type="button" className={BUTTON} onClick={() => onCancel(true)}>
+          Cancel
+        </button>
+        <button
+          ref={confirmButton}
+          type="button"
+          className="rounded-full bg-red-600 px-3 py-1 text-xs font-medium text-white hover:bg-red-700 dark:bg-red-500 dark:hover:bg-red-600"
+          onClick={onConfirm}
+        >
+          Delete
+        </button>
+      </div>
+    </div>
+  )
+}
+
 /** Download (for finished jobs) and delete buttons, with the error of the last failed action. */
 function JobActions({ jobId, canDownload, onDeleted }: { jobId: string; canDownload: boolean; onDeleted: () => void }) {
   const [busy, setBusy] = useState<'download' | 'delete' | null>(null)
   const [error, setError] = useState<string | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const deleteButton = useRef<HTMLButtonElement>(null)
+
+  const cancelDelete = useCallback((restoreFocus: boolean) => {
+    setConfirming(false)
+    if (restoreFocus) deleteButton.current?.focus()
+  }, [])
 
   async function run(action: 'download' | 'delete') {
     setBusy(action)
@@ -56,24 +141,46 @@ function JobActions({ jobId, canDownload, onDeleted }: { jobId: string; canDownl
     setBusy(null)
   }
 
+  const deleteLabel = busy === 'delete' ? 'Deleting…' : 'Delete'
+  const downloadLabel = busy === 'download' ? 'Preparing…' : 'Download'
+
   return (
     <div className="flex shrink-0 flex-col items-end gap-1">
-      <div className="flex gap-2">
+      <div className="relative flex gap-2">
+        <button
+          ref={deleteButton}
+          type="button"
+          className={DANGER_ICON_BUTTON}
+          title={deleteLabel}
+          aria-label={deleteLabel}
+          aria-haspopup="dialog"
+          aria-expanded={confirming}
+          disabled={busy !== null}
+          onClick={() => setConfirming(true)}
+        >
+          <Icon d={busy === 'delete' ? ICONS.busy : ICONS.delete} spin={busy === 'delete'} />
+        </button>
         {canDownload && (
-          <button type="button" className={BUTTON} disabled={busy !== null} onClick={() => void run('download')}>
-            {busy === 'download' ? 'Preparing…' : 'Download'}
+          <button
+            type="button"
+            className={ICON_BUTTON}
+            title={downloadLabel}
+            aria-label={downloadLabel}
+            disabled={busy !== null}
+            onClick={() => void run('download')}
+          >
+            <Icon d={busy === 'download' ? ICONS.busy : ICONS.download} spin={busy === 'download'} />
           </button>
         )}
-        <button
-          type="button"
-          className={BUTTON}
-          disabled={busy !== null}
-          onClick={() => {
-            if (window.confirm('Delete this image and its compressed version?')) void run('delete')
-          }}
-        >
-          {busy === 'delete' ? 'Deleting…' : 'Delete'}
-        </button>
+        {confirming && (
+          <ConfirmDelete
+            onCancel={cancelDelete}
+            onConfirm={() => {
+              setConfirming(false)
+              void run('delete')
+            }}
+          />
+        )}
       </div>
       {error && (
         <p role="alert" className="text-xs text-red-600 dark:text-red-400">
