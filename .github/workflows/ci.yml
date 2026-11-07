@@ -24,6 +24,8 @@ jobs:
         with:
           node-version: 24
           cache: pnpm
+      # PDF compression tests run Ghostscript; they fail instead of skipping when CI is set.
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ghostscript
       - run: pnpm install --frozen-lockfile
       - run: pnpm format:check
       - run: pnpm lint:check
@@ -69,5 +71,6 @@ jobs:
         with:
           path: ~/.cache/firebase/emulators
           key: firebase-emulators-${{ hashFiles('pnpm-lock.yaml') }}
+      - run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ghostscript
       - run: pnpm install --frozen-lockfile
       - run: pnpm test:integration
