@@ -39,10 +39,17 @@ export function TelegramLoginNotice({ state, currentName, onConfirm, onDismiss }
 
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-900">
-      <span>
-        Sign in with your Telegram account? You will leave the account you are signed in to
-        {currentName ? ` (${currentName})` : ''}. To use both together, choose “Connect Telegram” instead.
-      </span>
+      {state.leaving === 'images' ? (
+        <span>
+          Sign in with your Telegram account? The images of this session move to it. Continue only with a link from your
+          own Telegram.
+        </span>
+      ) : (
+        <span>
+          Sign in with your Telegram account? You will leave the account you are signed in to
+          {currentName ? ` (${currentName})` : ''}. To use both together, choose “Connect Telegram” instead.
+        </span>
+      )}
       <div className="flex gap-2">
         <button type="button" onClick={onConfirm} className={BUTTON}>
           Sign in with Telegram

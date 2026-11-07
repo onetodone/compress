@@ -9,6 +9,8 @@ import {
   downloadJobResponseSchema,
   type ListJobsResponse,
   listJobsResponseSchema,
+  type MergeSessionResponse,
+  mergeSessionResponseSchema,
   type MeResponse,
   meResponseSchema,
   type SubmitJobResponse,
@@ -95,6 +97,18 @@ export const api = {
   /** Exchanges a login code from the Telegram bot for a Firebase custom token; needs no session. */
   telegramLogin(code: string): Promise<TelegramLoginResponse> {
     return send('/auth/telegram', telegramLoginResponseSchema, { method: 'POST', body: JSON.stringify({ code }) })
+  },
+
+  /**
+   * Moves the images and today's used quota of an anonymous session the user just left into the
+   * signed-in user.
+   * @param anonymousToken Firebase ID token of that anonymous session
+   */
+  mergeAnonymousSession(anonymousToken: string): Promise<MergeSessionResponse> {
+    return request('/me/merge', mergeSessionResponseSchema, {
+      method: 'POST',
+      body: JSON.stringify({ anonymousToken }),
+    })
   },
 
   /** Disconnects the linked Telegram account; the user needs Google to sign in afterwards. */
