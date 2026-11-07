@@ -1,5 +1,5 @@
 import type { NestExpressApplication } from '@nestjs/platform-express'
-import { MAX_INPUT_BYTES, meResponseSchema } from '@onetodone/compress-shared'
+import { meResponseSchema } from '@onetodone/compress-shared'
 import { Firestore } from 'firebase-admin/firestore'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
@@ -8,6 +8,15 @@ import { createApiApp } from '../src/api/api.module.js'
 import { apiConfig } from './support/config.js'
 import { QuotaService } from '../src/common/quota/quota.service.js'
 import { clearFirestore, linkWithGoogle, signInAnonymously, signUpWithEmail } from './support/emulators.js'
+
+const MB = 1024 * 1024
+const IMAGE_LIMITS = [
+  { type: 'image/jpeg', maxBytes: 20 * MB },
+  { type: 'image/png', maxBytes: 20 * MB },
+  { type: 'image/webp', maxBytes: 20 * MB },
+  { type: 'image/avif', maxBytes: 20 * MB },
+]
+const LIMITS = { maxInputBytes: 20 * MB, formats: [...IMAGE_LIMITS, { type: 'application/pdf', maxBytes: 20 * MB }] }
 
 describe('GET /me', () => {
   let app: NestExpressApplication
@@ -45,7 +54,7 @@ describe('GET /me', () => {
       kind: 'anonymous',
       isAnonymous: true,
       quota: { dayKey: expect.any(String), used: 0, limit: 5 },
-      limits: { maxInputBytes: MAX_INPUT_BYTES },
+      limits: LIMITS,
       networkLimitReached: false,
       telegram: { linked: false, username: null },
     })
@@ -61,7 +70,7 @@ describe('GET /me', () => {
       kind: 'registered',
       isAnonymous: false,
       quota: { used: 0, limit: 30 },
-      limits: { maxInputBytes: MAX_INPUT_BYTES },
+      limits: LIMITS,
     })
   })
 
@@ -86,6 +95,22 @@ describe('GET /me', () => {
       isAnonymous: false,
       quota: { used: 5, limit: 30 },
     })
+  })
+
+  it('lists only image formats when PDF compression is off', async () => {
+    const imagesOnly = await createApiApp({ ...apiConfig, GHOSTSCRIPT_PATH: undefined })
+    await imagesOnly.init()
+    const { token } = await signInAnonymously()
+
+    try {
+      const response = await request(imagesOnly.getHttpServer())
+        .get('/me')
+        .set('Authorization', `Bearer ${token}`)
+        .expect(200)
+      expect(response.body.limits).toEqual({ maxInputBytes: 20 * MB, formats: IMAGE_LIMITS })
+    } finally {
+      await imagesOnly.close()
+    }
   })
 
   it('keeps health checks public', async () => {

@@ -1,6 +1,12 @@
 'use client'
 
-import { type AccountKind, formatBytes, type JobSummary, type JobSummaryStatus } from '@onetodone/compress-shared'
+import {
+  type AccountKind,
+  fileFormats,
+  formatBytes,
+  type JobSummary,
+  type JobSummaryStatus,
+} from '@onetodone/compress-shared'
 import Image from 'next/image'
 import { type ReactNode, useCallback, useEffect, useId, useRef, useState } from 'react'
 
@@ -87,12 +93,12 @@ function ConfirmDelete({ onConfirm, onCancel }: { onConfirm: () => void; onCance
     <div
       ref={panel}
       role="alertdialog"
-      aria-label="Delete image"
+      aria-label="Delete file"
       aria-describedby={textId}
       className="absolute top-full right-0 z-10 mt-2 flex w-60 flex-col gap-3 rounded-lg border border-zinc-200 bg-white p-3 shadow-lg dark:border-zinc-700 dark:bg-zinc-900"
     >
       <p id={textId} className="text-sm">
-        Delete this image and its compressed version?
+        Delete this file and its compressed version?
       </p>
       <div className="flex justify-end gap-2">
         <button type="button" className={BUTTON} onClick={() => onCancel(true)}>
@@ -191,14 +197,43 @@ function JobActions({ jobId, canDownload, onDeleted }: { jobId: string; canDownl
   )
 }
 
-/** Small picture of a finished job: the CDN preview, or the result itself when there is no preview. */
-function Thumbnail({ job }: { job: JobSummary | null }) {
-  const done = job?.status === 'done'
+/** The document format of a job or a picked file, or `null` for images and unknown types. */
+function documentFormatOf(job: JobSummary | null, name: string): string | null {
+  const type = fileFormats.schema.safeParse(job?.outputType ?? job?.inputType ?? fileFormats.typeOfFileName(name))
+  if (!type.success) return null
+  const info = fileFormats.info(type.data)
+  return info.kind === 'document' ? info.name : null
+}
+
+/**
+ * Small picture of a job: for a finished image the CDN preview, or the result itself when there is
+ * no preview; for a document an icon with its format.
+ */
+function Thumbnail({ job, name }: { job: JobSummary | null; name: string }) {
+  const documentFormat = documentFormatOf(job, name)
+  const done = job?.status === 'done' && documentFormat === null
   const resultUrl = useResultUrl(done && !job.previewUrl ? job.id : null)
   const src = done ? (job.previewUrl ?? resultUrl) : null
   return (
-    <div className="relative h-14 w-14 shrink-0 overflow-hidden rounded-md bg-zinc-100 dark:bg-zinc-800">
+    <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
       {src && <Image src={src} alt="" fill sizes="56px" className="object-cover" />}
+      {documentFormat && (
+        <>
+          <svg
+            aria-hidden
+            viewBox="0 0 24 24"
+            className="size-9"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth={1.25}
+            strokeLinejoin="round"
+          >
+            <path d="M6 3h8l4 4v14H6z" />
+            <path d="M14 3v4h4" />
+          </svg>
+          <span className="absolute bottom-2.5 text-[9px] font-semibold tracking-wide">{documentFormat}</span>
+        </>
+      )}
     </div>
   )
 }
@@ -252,7 +287,7 @@ function Result({ job }: { job: JobSummary }) {
 
 function JobState({ job, liveStopped }: { job: JobSummary; liveStopped: boolean }) {
   if (job.status === 'done') return <Result job={job} />
-  if (job.status === 'failed') return <Problem>{job.error ?? 'The image could not be compressed.'}</Problem>
+  if (job.status === 'failed') return <Problem>{job.error ?? 'The file could not be compressed.'}</Problem>
   if (job.status === 'awaiting_upload' || job.status === 'unknown') {
     return <span className="text-sm text-zinc-500 dark:text-zinc-400">{STATUS_LABELS[job.status]}</span>
   }
@@ -297,7 +332,7 @@ interface JobCardProps {
   onRemove: () => void
 }
 
-/** One image of the list: the upload while it runs, then the live job with its result. */
+/** One file of the list: the upload while it runs, then the live job with its result. */
 export function JobCard({ upload, job, liveStopped, accountKind, onRemove }: JobCardProps) {
   const name = job?.originalName ?? upload?.name ?? ''
   const jobId = job?.id ?? upload?.jobId ?? null
@@ -307,7 +342,7 @@ export function JobCard({ upload, job, liveStopped, accountKind, onRemove }: Job
 
   return (
     <article className="flex items-center gap-3 rounded-xl border border-zinc-200 bg-white p-3 dark:border-zinc-800 dark:bg-zinc-900">
-      <Thumbnail job={job} />
+      <Thumbnail job={job} name={name} />
       <div className="flex min-w-0 flex-1 flex-col gap-1.5">
         <h3 className="min-w-0 truncate text-sm font-medium" title={name}>
           {name}

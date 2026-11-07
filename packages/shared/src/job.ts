@@ -1,6 +1,6 @@
 import { z } from 'zod'
 
-import { IMAGE_TYPES, type ImageType, imageTypeSchema } from './format.js'
+import { FILE_TYPES, type FileType, fileTypeSchema, MAX_INPUT_BYTES } from './format.js'
 
 /** Lifecycle states of a compression job, in the order a successful job passes through them. */
 export const JOB_STATUSES = ['awaiting_upload', 'queued', 'processing', 'done', 'failed'] as const
@@ -23,14 +23,14 @@ export function isTerminalJobStatus(status: string): boolean {
   return (TERMINAL_JOB_STATUSES as readonly string[]).includes(status)
 }
 
-/** Image MIME types accepted for compression: every supported format. */
-export const INPUT_TYPES = IMAGE_TYPES
+/** MIME types a job can be created for: every supported format. A server may refuse some of them. */
+export const INPUT_TYPES = FILE_TYPES
 
-/** Validates an accepted image MIME type. */
-export const inputTypeSchema = imageTypeSchema
+/** Validates a MIME type a job can be created for. */
+export const inputTypeSchema = fileTypeSchema
 
-/** Image MIME type accepted for compression. */
-export type InputType = ImageType
+/** MIME type a job can be created for. */
+export type InputType = FileType
 
 /** Trade-offs between quality and size offered for compression. */
 export const COMPRESSION_PRESETS = ['balanced', 'smaller'] as const
@@ -65,12 +65,6 @@ export function readJobSettings(value: unknown): JobSettings {
   return storedJobSettingsSchema.parse(value ?? {})
 }
 
-/**
- * Largest original image the API accepts from anyone, in bytes (10 MB). The limit of a user can be
- * lower; `GET /me` returns it as `limits.maxInputBytes`.
- */
-export const MAX_INPUT_BYTES = 10 * 1024 * 1024
-
 /** How long a presigned upload URL stays valid, in seconds (10 minutes). */
 export const UPLOAD_URL_TTL_SECONDS = 10 * 60
 
@@ -94,7 +88,7 @@ export const createJobRequestSchema = z.object({
   contentType: inputTypeSchema,
   /** Exact size of the upload in bytes. */
   size: z.number().int().positive().max(MAX_INPUT_BYTES),
-  /** How to compress the image; defaults apply to anything left out. */
+  /** How to compress the file; defaults apply to anything left out. */
   settings: jobSettingsSchema.prefault({}),
 })
 

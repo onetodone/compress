@@ -7,6 +7,7 @@ import type {
   R2Config,
   WorkerConfig,
 } from '../../src/common/config/config.js'
+import { GHOSTSCRIPT_PATH, ghostscriptAvailable } from './ghostscript.js'
 
 export const PROJECT_ID = process.env.GCLOUD_PROJECT ?? 'demo-onetodone-compress-test'
 
@@ -45,6 +46,8 @@ export const workerConfig: WorkerConfig = {
   ...r2Config,
   ...cloudinaryConfig,
   ...queueConfig,
+  // Without Ghostscript the worker refuses PDF files; the tests that need it are skipped then.
+  GHOSTSCRIPT_PATH: ghostscriptAvailable ? GHOSTSCRIPT_PATH : undefined,
   QUEUE_CONCURRENCY: 2,
 }
 
@@ -57,6 +60,8 @@ export const apiConfig: ApiConfig = {
   QUOTA_ANONYMOUS_DAILY: 5,
   QUOTA_SIGNED_IN_DAILY: 30,
   QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
+  // The API and the bot only check that it is set.
+  GHOSTSCRIPT_PATH: 'gs',
   TELEGRAM_BOT_USERNAME: 'test_compressor_bot',
 }
 
@@ -68,6 +73,7 @@ export const botConfig: BotConfig = {
   QUOTA_ANONYMOUS_DAILY: 5,
   QUOTA_SIGNED_IN_DAILY: 30,
   QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
+  GHOSTSCRIPT_PATH: 'gs',
   TELEGRAM_BOT_TOKEN: '123456:test-token',
   WEB_APP_URL: 'https://img.example.com',
 }

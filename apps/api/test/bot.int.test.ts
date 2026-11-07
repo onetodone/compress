@@ -171,19 +171,29 @@ describe('telegram bot', () => {
       expect((await jobs())[0]?.get('originalName')).toBe('image.jpg')
     })
 
-    it('refuses a file of another type without creating a job', async () => {
-      await bot.document(document({ fileName: 'notes.pdf', mimeType: 'application/pdf' }))
+    it('accepts a PDF document', async () => {
+      chat.files.set('file-pdf', fixture('document.pdf'))
+      await bot.document(document({ fileId: 'file-pdf', fileName: 'report.pdf', mimeType: 'application/pdf' }))
 
-      expect(lastText()).toBe('I can only compress JPEG, PNG, WebP and AVIF images. Send one as a file.')
+      const [job] = await jobs()
+      expect(job?.data()).toMatchObject({ status: 'queued', inputType: 'application/pdf', originalName: 'report.pdf' })
+    })
+
+    it('refuses a file of another type without creating a job', async () => {
+      await bot.document(document({ fileName: 'notes.zip', mimeType: 'application/zip' }))
+
+      expect(lastText()).toBe(
+        'I can only compress JPEG, PNG, WebP and AVIF images and PDF documents. Send one as a file.',
+      )
       expect(chat.callsOf('message')[0]?.replyTo).toBe(MESSAGE_ID)
       expect(await jobs()).toHaveLength(0)
     })
 
     it('refuses a file above the size limit before downloading it', async () => {
       chat.files.clear()
-      await bot.document({ ...document(), fileSize: 11 * 1024 * 1024 })
+      await bot.document({ ...document(), fileSize: 21 * 1024 * 1024 })
 
-      expect(lastText()).toBe('The file must be at most 10 MB.')
+      expect(lastText()).toBe('The file must be at most 20 MB.')
       expect(await jobs()).toHaveLength(0)
     })
 
@@ -192,7 +202,7 @@ describe('telegram bot', () => {
 
       await bot.document(document({ fileSize: undefined }))
 
-      expect(lastText()).toBe('The file is too large: images can be at most 10 MB.')
+      expect(lastText()).toBe('The file is too large: JPEG files can be at most 20 MB.')
       expect(await jobs()).toHaveLength(0)
     })
 
@@ -203,7 +213,7 @@ describe('telegram bot', () => {
 
       await bot.document(document({ messageId: MESSAGE_ID + 1 }))
 
-      expect(lastText()).toMatch(/^You have used all 30 images for today\. The limit resets at 00:00 UTC, in /)
+      expect(lastText()).toMatch(/^You have used all 30 files for today\. The limit resets at 00:00 UTC, in /)
       expect(await jobs()).toHaveLength(1)
     })
 
@@ -230,13 +240,13 @@ describe('telegram bot', () => {
 
       await bot.showQuota(message(), new Date())
 
-      expect(lastText()).toMatch(/^Today you have used 1 of 30 images; 29 left\./)
+      expect(lastText()).toMatch(/^Today you have used 1 of 30 files; 29 left\./)
     })
 
-    it('says so when there are no images', async () => {
+    it('says so when there are no files', async () => {
       await bot.showImages(message())
 
-      expect(lastText()).toMatch(/^You have no images yet\./)
+      expect(lastText()).toMatch(/^You have no files yet\./)
     })
 
     it('lists the images newest first with buttons, five per page', async () => {
@@ -251,7 +261,7 @@ describe('telegram bot', () => {
       await bot.showImages(message())
 
       const [list] = chat.callsOf('message')
-      expect(list?.text).toMatch(/^Your images: 7 · page 1 of 2\nToday: 1 of 30 images used\./)
+      expect(list?.text).toMatch(/^Your files: 7 · page 1 of 2\nToday: 1 of 30 files used\./)
       // The queued job from the message is the newest.
       expect(list?.text).toContain('1. photo.jpg\nWaiting to be compressed…')
       expect(list?.text).toContain('2. image-5.jpg\n2.0 KB → 500 B, 75% smaller · 6 days left')
@@ -267,7 +277,7 @@ describe('telegram bot', () => {
       })
 
       const [page] = chat.callsOf('edit')
-      expect(page?.text).toMatch(/^Your images: 7 · page 2 of 2/)
+      expect(page?.text).toMatch(/^Your files: 7 · page 2 of 2/)
       expect(page?.text).toContain('6. image-1.jpg')
       expect(page?.text).toContain('7. image-0.jpg')
       expect(page?.keyboard?.at(-1)?.map((button) => button.text)).toEqual(['‹ Newer', '↻ Refresh'])
@@ -304,7 +314,7 @@ describe('telegram bot', () => {
       expect((await firestore.doc(`jobs/${jobId}`).get()).exists).toBe(false)
       expect([...storage.objects.keys()].filter((key) => key.includes(jobId))).toEqual([])
       expect(chat.callsOf('callbackAnswer').at(-1)).toMatchObject({ callbackId: 'c2', text: 'Deleted.' })
-      expect(chat.callsOf('edit').at(-1)?.text).toMatch(/^You have no images yet\./)
+      expect(chat.callsOf('edit').at(-1)?.text).toMatch(/^You have no files yet\./)
     })
 
     it('does not let a user download or delete the job of someone else', async () => {
@@ -313,7 +323,7 @@ describe('telegram bot', () => {
       await bot.callback({ ...message(), callbackId: 'c1', data: encodeCallback({ type: 'download', jobId }) })
       await bot.callback({ ...message(), callbackId: 'c2', data: encodeCallback({ type: 'delete', jobId, page: 0 }) })
 
-      expect(chat.callsOf('callbackAnswer')[0]).toMatchObject({ text: 'The image is no longer available.' })
+      expect(chat.callsOf('callbackAnswer')[0]).toMatchObject({ text: 'The file is no longer available' })
       expect(chat.callsOf('document')).toEqual([])
       expect((await firestore.doc(`jobs/${jobId}`).get()).exists).toBe(true)
     })

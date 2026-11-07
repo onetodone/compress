@@ -30,8 +30,8 @@ describe('uniqueFileNames', () => {
     expect(uniqueFileNames(['../../etc/passwd.png', 'a\\b.jpg', '..', ' '])).toEqual([
       '.._.._etc_passwd.png',
       'a_b.jpg',
-      'image',
-      'image (2)',
+      'file',
+      'file (2)',
     ])
   })
 })

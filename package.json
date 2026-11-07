@@ -1,6 +1,6 @@
 {
   "name": "@onetodone/compress",
-  "version": "0.15.0",
+  "version": "0.16.0",
   "description": "Image compression service: upload JPEG or PNG images and download smaller versions.",
   "private": true,
   "type": "module",

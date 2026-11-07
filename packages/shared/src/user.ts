@@ -1,5 +1,6 @@
 import { z } from 'zod'
 
+import { fileTypeSchema, IMAGE_TYPES, type InputLimits } from './format.js'
 import { telegramStatusSchema } from './telegram.js'
 
 /** Validates the daily quota of a user. */
@@ -24,14 +25,45 @@ export const accountKindSchema = z.enum(['anonymous', 'registered'])
  */
 export type AccountKind = z.infer<typeof accountKindSchema>
 
+/** Validates a file format a user may upload and its size limit. */
+export const formatLimitSchema = z.object({
+  /** MIME type; may name a format this version does not know. */
+  type: z.string(),
+  /** Largest file of this format the user may upload, in bytes. */
+  maxBytes: z.number().int().positive(),
+})
+
+/** A file format a user may upload and its size limit. */
+export type FormatLimit = z.infer<typeof formatLimitSchema>
+
 /** Validates the per-file limits of a user. */
 export const userLimitsSchema = z.object({
-  /** Largest original image the user may upload, in bytes. */
+  /** Largest original image the user may upload, in bytes; for clients that do not read `formats`. */
   maxInputBytes: z.number().int().positive(),
+  /** Every format the user may upload, with its size limit. Absent from older APIs, which accept images only. */
+  formats: z.array(formatLimitSchema).optional(),
 })
 
 /** Per-file limits of a user. */
 export type UserLimits = z.infer<typeof userLimitsSchema>
+
+/**
+ * Returns the formats a user may upload and their size limits, leaving out formats this version
+ * does not know. Limits from an API without `formats` cover the image formats.
+ * @param limits `limits` of `GET /me`
+ */
+export function inputLimitsOf(limits: UserLimits): InputLimits {
+  const result: InputLimits = {}
+  if (!limits.formats) {
+    for (const type of IMAGE_TYPES) result[type] = limits.maxInputBytes
+    return result
+  }
+  for (const { type, maxBytes } of limits.formats) {
+    const known = fileTypeSchema.safeParse(type)
+    if (known.success) result[known.data] = maxBytes
+  }
+  return result
+}
 
 /** Validates the response of `GET /me`. */
 export const meResponseSchema = z.object({

@@ -1,9 +1,13 @@
 import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Ip, Post } from '@nestjs/common'
 import {
+  FILE_TYPES,
+  isImageType,
   type MergeSessionRequest,
   mergeSessionRequestSchema,
   type MergeSessionResponse,
   type MeResponse,
+  type InputLimits,
+  type UserLimits,
 } from '@onetodone/compress-shared'
 
 import { AccountLinkService } from '../../common/accounts/account-link.service.js'
@@ -38,7 +42,7 @@ export class MeController {
       kind: user.kind,
       isAnonymous: user.kind === 'anonymous',
       quota,
-      limits: { maxInputBytes: this.quota.entitlements(user).maxInputBytes },
+      limits: limitsOf(this.quota.entitlements(user).inputLimits),
       networkLimitReached,
       telegram: this.config.TELEGRAM_BOT_USERNAME ? telegram : null,
     }
@@ -52,4 +56,13 @@ export class MeController {
   ): Promise<MergeSessionResponse> {
     return { movedJobs: await this.accounts.mergeAnonymousSession(user, body.anonymousToken) }
   }
+}
+
+function limitsOf(inputLimits: InputLimits): UserLimits {
+  const formats = FILE_TYPES.flatMap((type) => {
+    const maxBytes = inputLimits[type]
+    return maxBytes === undefined ? [] : [{ type, maxBytes }]
+  })
+  const images = formats.filter(({ type }) => isImageType(type)).map(({ maxBytes }) => maxBytes)
+  return { maxInputBytes: Math.max(...images), formats }
 }

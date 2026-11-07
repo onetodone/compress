@@ -306,7 +306,7 @@ describe('linking the website and Telegram', () => {
       await bot.start(message(), `link_${code}`)
       expect(await identityUid()).toBe(oldUid)
       const question = lastMessage()!
-      expect(question.text).toContain('The 1 image you have here moves to that account too.')
+      expect(question.text).toContain('The 1 file you have here moves to that account too.')
 
       await bot.callback({
         ...message(),
@@ -344,7 +344,7 @@ describe('linking the website and Telegram', () => {
       const code = await linkCode(token)
 
       await bot.start(message(), `link_${code}`)
-      expect(lastMessage()?.text).toContain('The 1 image you have here stays with the current account')
+      expect(lastMessage()?.text).toContain('The 1 file you have here stays with the current account')
       await bot.callback({ ...message(), callbackId: 'cb', data: encodeCallback({ type: 'link', code }) })
 
       expect(lastEdit()?.text).toBe(LINKED_TEXT)
@@ -466,7 +466,7 @@ describe('linking the website and Telegram', () => {
       expect(newUid).not.toBe(uid)
       expect(await userDoc(newUid)).toMatchObject({ jobsToday: 1, telegramId: TELEGRAM.id })
       await bot.showImages(message())
-      expect(lastMessage()?.text).toContain('You have no images yet.')
+      expect(lastMessage()?.text).toContain('You have no files yet.')
     })
 
     it('answers 404 when nothing is connected', async () => {

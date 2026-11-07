@@ -124,7 +124,7 @@ describe('compression queue', () => {
 
       expect(await settled()).toMatchObject({
         status: 'failed',
-        error: 'The image could not be processed. Please try again later.',
+        error: 'The file could not be processed. Please try again later.',
         attempts: queueConfig.QUEUE_MAX_ATTEMPTS,
         quotaRefunded: true,
       })

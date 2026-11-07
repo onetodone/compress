@@ -174,4 +174,16 @@ describe('parseConfig', () => {
     )
     expect(() => parseConfig(botConfigSchema, { ...botEnv, WEB_APP_URL: 'not a url' })).toThrow(/WEB_APP_URL/)
   })
+  it('reads the Ghostscript executable of every process and treats an empty value as unset', () => {
+    const botEnv = { ...workerEnv, TELEGRAM_BOT_TOKEN: '1234567890:AAH-x_yZ0123456789abcdefghijklmnopq' }
+    for (const [schema, env] of [
+      [apiConfigSchema, apiEnv],
+      [workerConfigSchema, workerEnv],
+      [botConfigSchema, botEnv],
+    ] as const) {
+      expect(parseConfig(schema, env).GHOSTSCRIPT_PATH).toBeUndefined()
+      expect(parseConfig(schema, { ...env, GHOSTSCRIPT_PATH: '' }).GHOSTSCRIPT_PATH).toBeUndefined()
+      expect(parseConfig(schema, { ...env, GHOSTSCRIPT_PATH: '/usr/bin/gs' }).GHOSTSCRIPT_PATH).toBe('/usr/bin/gs')
+    }
+  })
 })

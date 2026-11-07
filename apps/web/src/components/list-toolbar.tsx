@@ -8,7 +8,7 @@ import { api } from '@/lib/api'
 import { archiveResults, fetchBytes } from '@/lib/download-all'
 import { savedPercent } from '@/lib/files'
 
-/** Counts of the images picked in this session. */
+/** Counts of the files picked in this session. */
 export interface UploadTotals {
   total: number
   done: number
@@ -18,7 +18,7 @@ export interface UploadTotals {
   outputBytes: number
 }
 
-const ARCHIVE_NAME = 'compressed-images.zip'
+const ARCHIVE_NAME = 'compressed-files.zip'
 
 function saveFile(data: Uint8Array<ArrayBuffer>, name: string) {
   const url = URL.createObjectURL(new Blob([data], { type: 'application/zip' }))
@@ -47,12 +47,12 @@ function DownloadAll({ jobs }: { jobs: readonly JobSummary[] }) {
       if (failed > 0) {
         setMessage(
           zip
-            ? `${failed} of ${jobs.length} images could not be added. Try again.`
-            : 'The images could not be downloaded. Try again.',
+            ? `${failed} of ${jobs.length} files could not be added. Try again.`
+            : 'The files could not be downloaded. Try again.',
         )
       }
     } catch {
-      setMessage('The images could not be downloaded. Try again.')
+      setMessage('The files could not be downloaded. Try again.')
     } finally {
       setProgress(null)
     }

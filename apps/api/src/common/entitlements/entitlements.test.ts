@@ -1,15 +1,28 @@
-import { MAX_INPUT_BYTES } from '@onetodone/compress-shared'
+import { FILE_TYPES, fileFormats } from '@onetodone/compress-shared'
 import { describe, expect, it } from 'vitest'
 
 import { entitlementsFor } from './entitlements.js'
 
-const config = { QUOTA_ANONYMOUS_DAILY: 5, QUOTA_SIGNED_IN_DAILY: 30, QUOTA_ANONYMOUS_PER_IP_DAILY: 20 }
+const MB = 1024 * 1024
+const config = {
+  QUOTA_ANONYMOUS_DAILY: 5,
+  QUOTA_SIGNED_IN_DAILY: 30,
+  QUOTA_ANONYMOUS_PER_IP_DAILY: 20,
+  GHOSTSCRIPT_PATH: 'gs',
+}
+const allTypes = {
+  'image/jpeg': 20 * MB,
+  'image/png': 20 * MB,
+  'image/webp': 20 * MB,
+  'image/avif': 20 * MB,
+  'application/pdf': 20 * MB,
+}
 
 describe('entitlementsFor', () => {
   it('gives an anonymous user the anonymous daily limit and a per-network limit', () => {
     expect(entitlementsFor({ kind: 'anonymous' }, 'free', config)).toEqual({
       dailyJobs: 5,
-      maxInputBytes: MAX_INPUT_BYTES,
+      inputLimits: allTypes,
       networkLimited: true,
     })
   })
@@ -17,7 +30,7 @@ describe('entitlementsFor', () => {
   it('gives a registered user the signed-in daily limit without a per-network limit', () => {
     expect(entitlementsFor({ kind: 'registered' }, 'free', config)).toEqual({
       dailyJobs: 30,
-      maxInputBytes: MAX_INPUT_BYTES,
+      inputLimits: allTypes,
       networkLimited: false,
     })
   })
@@ -28,9 +41,16 @@ describe('entitlementsFor', () => {
     expect(entitlementsFor({ kind: 'anonymous' }, 'free', disabled).networkLimited).toBe(false)
   })
 
-  it('never allows files above the absolute ceiling', () => {
+  it('accepts only images when PDF compression is off', () => {
+    const { inputLimits } = entitlementsFor({ kind: 'registered' }, 'free', { ...config, GHOSTSCRIPT_PATH: undefined })
+
+    expect(Object.keys(inputLimits)).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+  })
+
+  it('never allows files above the ceiling of their format', () => {
     for (const kind of ['anonymous', 'registered'] as const) {
-      expect(entitlementsFor({ kind }, 'free', config).maxInputBytes).toBeLessThanOrEqual(MAX_INPUT_BYTES)
+      const { inputLimits } = entitlementsFor({ kind }, 'free', config)
+      for (const type of FILE_TYPES) expect(inputLimits[type]).toBeLessThanOrEqual(fileFormats.info(type).maxBytes)
     }
   })
 })

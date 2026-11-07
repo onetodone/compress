@@ -9,7 +9,7 @@ export interface ZipEntry {
 function safeName(name: string): string {
   // Slashes would create folders, and some unzip tools refuse names that climb out of the target.
   const cleaned = name.replace(/[/\\\u0000-\u001f\u007f]/g, '_').trim()
-  return cleaned === '' || /^\.+$/.test(cleaned) ? 'image' : cleaned
+  return cleaned === '' || /^\.+$/.test(cleaned) ? 'file' : cleaned
 }
 
 /**
@@ -33,7 +33,7 @@ export function uniqueFileNames(names: readonly string[]): string[] {
 }
 
 /**
- * Builds a ZIP archive. Entries are stored without compression: the images are compressed already,
+ * Builds a ZIP archive. Entries are stored without compression: the files are compressed already,
  * so deflating them again costs time and saves next to nothing.
  * @param entries files with names that are unique in the archive (see {@link uniqueFileNames})
  */

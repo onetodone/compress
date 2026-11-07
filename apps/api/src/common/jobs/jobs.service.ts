@@ -7,8 +7,9 @@ import {
   downloadFileName,
   type DownloadJobQuery,
   type DownloadJobResponse,
-  type ImageType,
-  imageTypeSchema,
+  fileFormats,
+  type FileType,
+  fileTypeSchema,
   type JobStatus,
   type JobSummary,
   jobIdSchema,
@@ -52,7 +53,7 @@ export interface JobPage {
 export interface JobResult {
   /** R2 key of the result. */
   key: string
-  type: ImageType
+  type: FileType
   /** Name to save the result under. */
   fileName: string
 }
@@ -111,17 +112,19 @@ export class JobsService {
   }
 
   /**
-   * Refuses a file the user may not compress now: too large, or no jobs left today. Nothing is
-   * counted; quota is consumed on submit, so this only saves an upload that could never be submitted.
+   * Refuses a file the user may not compress now: of a type the service does not accept, too large,
+   * or no jobs left today. Nothing is counted; quota is consumed on submit, so this only saves an
+   * upload that could never be submitted.
    *
    * @param ip client address, for the per-network limit on anonymous jobs
+   * @param type declared MIME type of the file
    * @param size size of the file in bytes
-   * @throws BadRequestException when the file is too large
+   * @throws BadRequestException when the type is not accepted or the file is too large
    * @throws HttpException 429 when a daily limit is reached
    */
-  async assertCanCreate(user: AuthUser, ip: string | undefined, size: number): Promise<void> {
-    const { maxInputBytes } = this.quota.entitlements(user)
-    if (size > maxInputBytes) throw new BadRequestException(tooLarge(maxInputBytes))
+  async assertCanCreate(user: AuthUser, ip: string | undefined, type: FileType, size: number): Promise<void> {
+    const maxBytes = this.maxInputBytes(user, type)
+    if (size > maxBytes) throw new BadRequestException(tooLarge(maxBytes))
     await this.quota.assertAvailable(user, ip)
   }
 
@@ -130,7 +133,7 @@ export class JobsService {
    * @param ip client address, for the per-network limit on anonymous jobs
    */
   async create(user: AuthUser, ip: string | undefined, request: CreateJobRequest): Promise<CreateJobResponse> {
-    await this.assertCanCreate(user, ip, request.size)
+    await this.assertCanCreate(user, ip, request.contentType, request.size)
     const ref = this.firestore.collection(JOBS).doc()
     const upload = await this.storage.presignUpload(
       originalKey(user.uid, ref.id),
@@ -147,7 +150,7 @@ export class JobsService {
    * but cannot be enqueued stays, and the stale job cleanup fails it and refunds its quota.
    *
    * @param request name, declared type and size of `data`
-   * @param data content of the original image
+   * @param data content of the original file
    * @param origin where the job comes from
    * @throws HttpException with a user-safe message when the job is refused
    */
@@ -157,7 +160,7 @@ export class JobsService {
     data: Buffer,
     origin: JobOrigin,
   ): Promise<SubmitJobResponse> {
-    await this.assertCanCreate(user, undefined, data.length)
+    await this.assertCanCreate(user, undefined, request.contentType, data.length)
     const ref = this.firestore.collection(JOBS).doc()
     await this.createRecord(ref, user, { ...request, size: data.length }, origin)
     try {
@@ -221,11 +224,7 @@ export class JobsService {
 
     let status = snapshot.get('status') as JobStatus
     if (status === 'awaiting_upload') {
-      const inputBytes = await this.verifyUpload(
-        snapshot.get('inputKey') as string,
-        snapshot.get('inputType') as string,
-        this.quota.entitlements(user).maxInputBytes,
-      )
+      const inputBytes = await this.verifyUpload(user, snapshot.get('inputKey') as string, snapshot.get('inputType'))
       const reservation = await this.quota.reserveNetwork(user, ip)
       let consumed = false
       try {
@@ -273,7 +272,7 @@ export class JobsService {
     const snapshot = await this.timer.measure('firestore', 'jobs.get', () => this.ref(jobId).get())
     const summary =
       snapshot.exists && snapshot.get('ownerId') === user.uid ? toJobSummary(snapshot.id, snapshot.data()!) : null
-    if (!summary) throw new NotFoundException('The image is no longer available')
+    if (!summary) throw new NotFoundException(NO_LONGER_AVAILABLE)
     return summary
   }
 
@@ -286,13 +285,13 @@ export class JobsService {
     const snapshot = await this.timer.measure('firestore', 'jobs.get', () => this.ref(jobId).get())
     // Old jobs are removed with their files, so a client opened earlier may still ask for one.
     if (!snapshot.exists || snapshot.get('ownerId') !== user.uid) {
-      throw new NotFoundException('The image is no longer available')
+      throw new NotFoundException(NO_LONGER_AVAILABLE)
     }
     const outputKey = snapshot.get('outputKey') as string | null | undefined
     if (snapshot.get('status') !== 'done' || !outputKey) throw new ConflictException('The job is not finished')
 
     // A document without `outputType` has its result in the input type.
-    const type = imageTypeSchema.parse(snapshot.get('outputType') ?? snapshot.get('inputType'))
+    const type = fileTypeSchema.parse(snapshot.get('outputType') ?? snapshot.get('inputType'))
     return { key: outputKey, type, fileName: downloadFileName(snapshot.get('originalName') as string, type) }
   }
 
@@ -335,13 +334,26 @@ export class JobsService {
     }
   }
 
+  /**
+   * Returns the largest file of a type the user may upload.
+   * @throws BadRequestException when the service does not accept the type
+   */
+  private maxInputBytes(user: AuthUser, type: FileType): number {
+    const maxBytes = this.quota.entitlements(user).inputLimits[type]
+    if (maxBytes === undefined) throw new BadRequestException(`${fileFormats.info(type).name} files are not supported`)
+    return maxBytes
+  }
+
   /** Returns the size of the uploaded original after checking it against the job. */
-  private async verifyUpload(key: string, declaredType: string, maxInputBytes: number): Promise<number> {
+  private async verifyUpload(user: AuthUser, key: string, declaredType: unknown): Promise<number> {
+    const type = fileTypeSchema.parse(declaredType)
+    // PDF compression may have been turned off since the job was created.
+    const maxBytes = this.maxInputBytes(user, type)
     const object = await this.storage.head(key)
     if (!object) throw new ConflictException('The file has not been uploaded')
     // The presigned URL binds type and size, so a mismatch means the object did not come from it.
     if (object.size === 0) throw new BadRequestException('The file is empty')
-    if (object.size > maxInputBytes) throw new BadRequestException(tooLarge(maxInputBytes))
+    if (object.size > maxBytes) throw new BadRequestException(tooLarge(maxBytes))
     if (object.contentType !== declaredType) throw new BadRequestException('The file type does not match the job')
     return object.size
   }
@@ -368,6 +380,9 @@ export class JobsService {
   }
 }
 
-function tooLarge(maxInputBytes: number): string {
-  return `The file must be at most ${formatBytes(maxInputBytes)}`
+/** Answer for a job whose document is gone, e.g. removed with its files after a week. */
+export const NO_LONGER_AVAILABLE = 'The file is no longer available'
+
+function tooLarge(maxBytes: number): string {
+  return `The file must be at most ${formatBytes(maxBytes)}`
 }

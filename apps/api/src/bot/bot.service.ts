@@ -10,9 +10,10 @@ import {
 import {
   createJobRequestSchema,
   DEFAULT_COMPRESSION_PRESET,
-  type ImageType,
-  imageFormats,
-  imageTypeSchema,
+  fileFormats,
+  type FileType,
+  fileTypeSchema,
+  type InputLimits,
   TELEGRAM_LOGIN_FRAGMENT,
 } from '@onetodone/compress-shared'
 
@@ -22,7 +23,8 @@ import { TelegramIdentityService, type TelegramUser } from '../common/accounts/t
 import type { AuthUser } from '../common/auth/auth-user.js'
 import type { BotConfig } from '../common/config/config.js'
 import { CONFIG } from '../common/config/config.module.js'
-import { JobsService } from '../common/jobs/jobs.service.js'
+import { entitlementsFor } from '../common/entitlements/entitlements.js'
+import { JobsService, NO_LONGER_AVAILABLE } from '../common/jobs/jobs.service.js'
 import { QuotaService } from '../common/quota/quota.service.js'
 import { ObjectStorage } from '../common/r2/object-storage.js'
 import {
@@ -79,8 +81,6 @@ export interface IncomingCallback extends IncomingMessage {
   data: string
 }
 
-const NO_LONGER_AVAILABLE = 'The image is no longer available.'
-
 // Characters a job name may not contain: control characters and path separators.
 // eslint-disable-next-line no-control-regex
 const UNSAFE_NAME_CHARACTERS = /[\u0000-\u001f\u007f/\\]/g
@@ -109,7 +109,7 @@ export class BotService {
       await this.linkFromWebsite(message, payload.slice(LINK_PREFIX.length), now)
       return
     }
-    await this.chat.sendMessage(message.chatId, startText())
+    await this.chat.sendMessage(message.chatId, startText(this.telegramInputLimits()))
   }
 
   /** Answers `/login` with a one-time link that signs in on the website as this account. */
@@ -147,7 +147,7 @@ export class BotService {
   async showQuota(message: IncomingMessage, now = new Date()): Promise<void> {
     const user = await this.identities.userFor(message.from)
     const quota = await this.quota.get(user, now)
-    await this.chat.sendMessage(message.chatId, quotaText(quota, this.quota.entitlements(user).maxInputBytes, now))
+    await this.chat.sendMessage(message.chatId, quotaText(quota, this.quota.entitlements(user).inputLimits, now))
   }
 
   async showImages(message: IncomingMessage, now = new Date()): Promise<void> {
@@ -170,15 +170,16 @@ export class BotService {
    */
   async document(document: IncomingDocument, now = new Date()): Promise<void> {
     const { chatId, messageId } = document
-    const type = imageTypeOf(document)
-    if (!type) {
-      await this.chat.sendMessage(chatId, unsupportedText(), { replyTo: messageId })
+    const type = fileTypeOf(document)
+    const limits = this.telegramInputLimits()
+    if (!type || limits[type] === undefined) {
+      await this.chat.sendMessage(chatId, unsupportedText(limits), { replyTo: messageId })
       return
     }
 
     const user = await this.identities.userFor(document.from)
     try {
-      await this.jobs.assertCanCreate(user, undefined, document.fileSize ?? 0)
+      await this.jobs.assertCanCreate(user, undefined, type, document.fileSize ?? 0)
       await this.react(chatId, messageId, WORKING_REACTION)
       const data = await this.chat.downloadFile(document.fileId)
       await this.jobs.createFromFile(
@@ -194,7 +195,7 @@ export class BotService {
       )
     } catch (error) {
       await this.react(chatId, messageId, null)
-      await this.chat.sendMessage(chatId, this.refusal(user, error, now), { replyTo: messageId })
+      await this.chat.sendMessage(chatId, this.refusal(user, type, error, now), { replyTo: messageId })
     }
   }
 
@@ -329,10 +330,20 @@ export class BotService {
     }
   }
 
+  /**
+   * Formats Telegram users may send and their size limits. Every Telegram user is registered, so
+   * they are known before the user is looked up.
+   */
+  private telegramInputLimits(): InputLimits {
+    return entitlementsFor({ kind: 'registered' }, 'free', this.config).inputLimits
+  }
+
   /** The user-safe answer to a file that was not accepted. */
-  private refusal(user: AuthUser, error: unknown, now: Date): string {
-    const { dailyJobs, maxInputBytes } = this.quota.entitlements(user)
-    if (error instanceof ChatError && error.kind === 'file_too_large') return tooLargeText(maxInputBytes)
+  private refusal(user: AuthUser, type: FileType, error: unknown, now: Date): string {
+    const { dailyJobs, inputLimits } = this.quota.entitlements(user)
+    if (error instanceof ChatError && error.kind === 'file_too_large') {
+      return tooLargeText(type, inputLimits[type] ?? fileFormats.info(type).maxBytes)
+    }
     if (error instanceof HttpException) {
       if (error.getStatus() === HttpStatus.TOO_MANY_REQUESTS) return dailyLimitText(dailyJobs, now)
       // API errors below 500 carry messages written for users.
@@ -351,17 +362,16 @@ function linkOutcomeText({ outcome, movedJobs }: LinkResult): string {
   return LINK_EXPIRED_TEXT
 }
 
-/** The image type of a document: its declared MIME type, or its extension when the type is unknown. */
-function imageTypeOf({ mimeType, fileName }: IncomingDocument): ImageType | undefined {
-  const declared = imageTypeSchema.safeParse(mimeType)
+/** The file type of a document: its declared MIME type, or its extension when the type is unknown. */
+function fileTypeOf({ mimeType, fileName }: IncomingDocument): FileType | undefined {
+  const declared = fileTypeSchema.safeParse(mimeType)
   if (declared.success) return declared.data
-  const dot = fileName?.lastIndexOf('.') ?? -1
-  return fileName && dot > 0 ? imageFormats.typeOfExtension(fileName.slice(dot + 1)) : undefined
+  return fileName ? fileFormats.typeOfFileName(fileName) : undefined
 }
 
 /** A valid job name for a document: its file name, cleaned up, or a generic one. */
-function fileNameOf({ fileName }: IncomingDocument, type: ImageType): string {
-  const fallback = `image.${imageFormats.extension(type)}`
+function fileNameOf({ fileName }: IncomingDocument, type: FileType): string {
+  const fallback = `${fileFormats.info(type).kind === 'image' ? 'image' : 'document'}.${fileFormats.extension(type)}`
   if (!fileName) return fallback
   const cleaned = fileName.replace(UNSAFE_NAME_CHARACTERS, '_').trim().slice(-255)
   return createJobRequestSchema.shape.originalName.safeParse(cleaned).success ? cleaned : fallback

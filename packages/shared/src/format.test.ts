@@ -1,65 +1,107 @@
 import { describe, expect, it } from 'vitest'
 
-import { defineImageFormats, downloadFileName, imageFormats } from './format.js'
+import {
+  defineFileFormats,
+  describeInputLimits,
+  downloadFileName,
+  fileFormats,
+  IMAGE_TYPES,
+  isImageType,
+  MAX_INPUT_BYTES,
+} from './format.js'
 
-describe('imageFormats', () => {
-  it('lists JPEG, PNG, WebP and AVIF', () => {
-    expect(imageFormats.types).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
-    expect(imageFormats.names('and')).toBe('JPEG, PNG, WebP and AVIF')
-    expect(imageFormats.names('or')).toBe('JPEG, PNG, WebP or AVIF')
+const MB = 1024 * 1024
+
+describe('fileFormats', () => {
+  it('lists JPEG, PNG, WebP, AVIF and PDF', () => {
+    expect(fileFormats.types).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'application/pdf'])
+    expect(fileFormats.names('and')).toBe('JPEG, PNG, WebP, AVIF and PDF')
+    expect(fileFormats.names('or', IMAGE_TYPES)).toBe('JPEG, PNG, WebP or AVIF')
   })
 
-  it('accepts every format and extension in a file input', () => {
-    expect(imageFormats.accept).toBe(
-      'image/jpeg,image/png,image/webp,image/avif,.jpg,.jpeg,.jpe,.jfif,.png,.webp,.avif',
+  it('tells images from documents', () => {
+    expect(IMAGE_TYPES).toEqual(['image/jpeg', 'image/png', 'image/webp', 'image/avif'])
+    expect(fileFormats.ofKind('document')).toEqual(['application/pdf'])
+    expect(isImageType('image/avif')).toBe(true)
+    expect(isImageType('application/pdf')).toBe(false)
+  })
+
+  it('limits every format to 20 MB', () => {
+    for (const type of fileFormats.types) expect(fileFormats.info(type).maxBytes).toBe(20 * MB)
+    expect(fileFormats.info('application/pdf').maxBytes).toBe(20 * MB)
+    expect(MAX_INPUT_BYTES).toBe(20 * MB)
+  })
+
+  it('accepts every format and extension in a file input, or only the given ones', () => {
+    expect(fileFormats.accept()).toBe(
+      'image/jpeg,image/png,image/webp,image/avif,application/pdf,.jpg,.jpeg,.jpe,.jfif,.png,.webp,.avif,.pdf',
     )
+    expect(fileFormats.accept(['image/png', 'application/pdf'])).toBe('image/png,application/pdf,.png,.pdf')
   })
 
   it('validates only the registered MIME types', () => {
-    expect(imageFormats.schema.parse('image/avif')).toBe('image/avif')
-    expect(imageFormats.schema.safeParse('image/gif').success).toBe(false)
-    expect(imageFormats.schema.safeParse('image/heic').success).toBe(false)
+    expect(fileFormats.schema.parse('image/avif')).toBe('image/avif')
+    expect(fileFormats.schema.parse('application/pdf')).toBe('application/pdf')
+    expect(fileFormats.schema.safeParse('image/gif').success).toBe(false)
+    expect(fileFormats.schema.safeParse('image/heic').success).toBe(false)
   })
 
-  it('maps extensions to types in any case, with or without the dot', () => {
-    expect(imageFormats.typeOfExtension('JPEG')).toBe('image/jpeg')
-    expect(imageFormats.typeOfExtension('.avif')).toBe('image/avif')
-    expect(imageFormats.typeOfExtension('gif')).toBeUndefined()
+  it('maps extensions and file names to types in any case', () => {
+    expect(fileFormats.typeOfExtension('JPEG')).toBe('image/jpeg')
+    expect(fileFormats.typeOfExtension('.avif')).toBe('image/avif')
+    expect(fileFormats.typeOfExtension('gif')).toBeUndefined()
+    expect(fileFormats.typeOfFileName('Report.PDF')).toBe('application/pdf')
+    expect(fileFormats.typeOfFileName('.pdf')).toBeUndefined()
+    expect(fileFormats.typeOfFileName('notes')).toBeUndefined()
   })
 
   it('writes files with the first extension of a format', () => {
-    expect(imageFormats.extension('image/jpeg')).toBe('jpg')
-    expect(imageFormats.extension('image/webp')).toBe('webp')
+    expect(fileFormats.extension('image/jpeg')).toBe('jpg')
+    expect(fileFormats.extension('application/pdf')).toBe('pdf')
   })
 
-  it('strips any known image extension and nothing else', () => {
-    expect(imageFormats.stripExtension('holiday.JFIF')).toBe('holiday')
-    expect(imageFormats.stripExtension('sticker.webp')).toBe('sticker')
-    expect(imageFormats.stripExtension('report.v2')).toBe('report.v2')
-    expect(imageFormats.stripExtension('archive.png.zip')).toBe('archive.png.zip')
-    expect(imageFormats.stripExtension('.png')).toBe('.png')
-    expect(imageFormats.stripExtension('logo')).toBe('logo')
+  it('strips any known extension and nothing else', () => {
+    expect(fileFormats.stripExtension('holiday.JFIF')).toBe('holiday')
+    expect(fileFormats.stripExtension('report.pdf')).toBe('report')
+    expect(fileFormats.stripExtension('report.v2')).toBe('report.v2')
+    expect(fileFormats.stripExtension('archive.png.zip')).toBe('archive.png.zip')
+    expect(fileFormats.stripExtension('.png')).toBe('.png')
+    expect(fileFormats.stripExtension('logo')).toBe('logo')
   })
 })
 
-describe('defineImageFormats', () => {
+describe('defineFileFormats', () => {
   it('derives everything for a format added to the registry', () => {
-    const formats = defineImageFormats({
-      'image/png': { name: 'PNG', extensions: ['png'] },
-      'image/x-fake': { name: 'Fake', extensions: ['fake', 'fk'] },
+    const formats = defineFileFormats({
+      'image/png': { name: 'PNG', kind: 'image', extensions: ['png'], maxBytes: 10 },
+      'text/x-fake': { name: 'Fake', kind: 'document', extensions: ['fake', 'fk'], maxBytes: 20 },
     })
 
-    expect(formats.schema.parse('image/x-fake')).toBe('image/x-fake')
-    expect(formats.accept).toBe('image/png,image/x-fake,.png,.fake,.fk')
-    expect(formats.extension('image/x-fake')).toBe('fake')
-    expect(formats.typeOfExtension('FK')).toBe('image/x-fake')
+    expect(formats.schema.parse('text/x-fake')).toBe('text/x-fake')
+    expect(formats.accept()).toBe('image/png,text/x-fake,.png,.fake,.fk')
+    expect(formats.extension('text/x-fake')).toBe('fake')
+    expect(formats.typeOfExtension('FK')).toBe('text/x-fake')
     expect(formats.stripExtension('drawing.fk')).toBe('drawing')
     expect(formats.names('or')).toBe('PNG or Fake')
-    expect(formats.info('image/x-fake').name).toBe('Fake')
+    expect(formats.ofKind('image')).toEqual(['image/png'])
+    expect(formats.info('text/x-fake').name).toBe('Fake')
   })
 
   it('names a single format without a conjunction', () => {
-    expect(defineImageFormats({ 'image/png': { name: 'PNG', extensions: ['png'] } }).names('and')).toBe('PNG')
+    const formats = defineFileFormats({ 'image/png': { name: 'PNG', kind: 'image', extensions: ['png'], maxBytes: 1 } })
+    expect(formats.names('and')).toBe('PNG')
+  })
+})
+
+describe('describeInputLimits', () => {
+  it('names formats with the same limit together', () => {
+    const images = Object.fromEntries(IMAGE_TYPES.map((type) => [type, 10 * MB]))
+
+    expect(describeInputLimits({ ...images, 'application/pdf': 20 * MB })).toBe(
+      'JPEG, PNG, WebP or AVIF up to 10 MB each, PDF up to 20 MB',
+    )
+    expect(describeInputLimits(images)).toBe('JPEG, PNG, WebP or AVIF up to 10 MB each')
+    expect(describeInputLimits({ 'application/pdf': 20 * MB })).toBe('PDF up to 20 MB')
   })
 })
 
@@ -68,16 +110,17 @@ describe('downloadFileName', () => {
     expect(downloadFileName('holiday.jpg', 'image/jpeg')).toBe('holiday.jpg')
     expect(downloadFileName('holiday.JPEG', 'image/jpeg')).toBe('holiday.jpg')
     expect(downloadFileName('scan.jpg', 'image/png')).toBe('scan.png')
+    expect(downloadFileName('Contract.PDF', 'application/pdf')).toBe('Contract.pdf')
   })
 
-  it('replaces any known image extension', () => {
+  it('replaces any known extension', () => {
     expect(downloadFileName('sticker.WEBP', 'image/webp')).toBe('sticker.webp')
     expect(downloadFileName('scan.jfif', 'image/jpeg')).toBe('scan.jpg')
     expect(downloadFileName('render.avif', 'image/avif')).toBe('render.avif')
   })
 
-  it('appends the extension when the name has no image extension', () => {
+  it('appends the extension when the name has no known extension', () => {
     expect(downloadFileName('logo', 'image/png')).toBe('logo.png')
-    expect(downloadFileName('report.v2', 'image/jpeg')).toBe('report.v2.jpg')
+    expect(downloadFileName('report.v2', 'application/pdf')).toBe('report.v2.pdf')
   })
 })

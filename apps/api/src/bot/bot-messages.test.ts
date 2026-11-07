@@ -1,4 +1,4 @@
-import type { JobSummary, Quota } from '@onetodone/compress-shared'
+import type { InputLimits, JobSummary, Quota } from '@onetodone/compress-shared'
 import { describe, expect, it } from 'vitest'
 
 import { JOB_LIFETIME_MS } from '../common/jobs/job-lifetime.js'
@@ -11,6 +11,9 @@ import {
   loginMessage,
   quotaText,
   resultCaption,
+  startText,
+  tooLargeText,
+  unsupportedText,
 } from './bot-messages.js'
 import { parseCallback } from './callback-data.js'
 import type { InlineButton } from './chat-gateway.js'
@@ -19,6 +22,14 @@ const dataOf = (button: InlineButton) => ('data' in button ? button.data : '')
 
 const NOW = new Date('2026-11-06T18:30:00Z')
 const quota: Quota = { dayKey: '2026-11-06', used: 3, limit: 30 }
+const MB = 1024 * 1024
+const images: InputLimits = {
+  'image/jpeg': 10 * MB,
+  'image/png': 10 * MB,
+  'image/webp': 10 * MB,
+  'image/avif': 10 * MB,
+}
+const withPdf: InputLimits = { ...images, 'application/pdf': 20 * MB }
 
 function job(fields: Partial<JobSummary> = {}): JobSummary {
   return {
@@ -41,21 +52,36 @@ function job(fields: Partial<JobSummary> = {}): JobSummary {
 
 describe('bot messages', () => {
   it('describes the limits of the user in the help', () => {
-    const text = helpText({ dailyJobs: 30, maxInputBytes: 10 * 1024 * 1024 })
+    const text = helpText({ dailyJobs: 30, inputLimits: withPdf })
 
-    expect(text).toContain('JPEG, PNG, WebP and AVIF images up to 10 MB each.')
-    expect(text).toContain('Up to 30 images per day')
+    expect(text).toContain('JPEG, PNG, WebP or AVIF up to 10 MB each, PDF up to 20 MB.')
+    expect(text).toContain('Up to 30 files per day')
     expect(text).toContain('files already sent to this chat stay here')
   })
 
   it('tells the quota left and when it resets', () => {
-    expect(quotaText(quota, 10 * 1024 * 1024, NOW)).toBe(
+    expect(quotaText(quota, withPdf, NOW)).toBe(
       [
-        'Today you have used 3 of 30 images; 27 left.',
+        'Today you have used 3 of 30 files; 27 left.',
         'The limit resets at 00:00 UTC, in 5 h 30 min.',
-        'Files up to 10 MB: JPEG, PNG, WebP or AVIF.',
+        'Files: JPEG, PNG, WebP or AVIF up to 10 MB each, PDF up to 20 MB.',
       ].join('\n'),
     )
+  })
+
+  it('names PDF documents only when the service compresses them', () => {
+    expect(startText(withPdf)).toContain('I make JPEG, PNG, WebP and AVIF images and PDF documents smaller')
+    expect(startText(withPdf)).toContain('Send me an image or a PDF as a file')
+    expect(startText(images)).toContain('I make JPEG, PNG, WebP and AVIF images smaller')
+    expect(startText(images)).toContain('Send me an image as a file')
+    expect(unsupportedText(withPdf)).toBe(
+      'I can only compress JPEG, PNG, WebP and AVIF images and PDF documents. Send one as a file.',
+    )
+    expect(unsupportedText(images)).toBe('I can only compress JPEG, PNG, WebP and AVIF images. Send one as a file.')
+  })
+
+  it('names the limit of the type of a file that is too large', () => {
+    expect(tooLargeText('application/pdf', 20 * MB)).toBe('The file is too large: PDF files can be at most 20 MB.')
   })
 
   it('captions a result with its sizes, or says the original is returned', () => {
@@ -90,29 +116,29 @@ describe('bot messages', () => {
       expect(loginMessage(url, 10)).toEqual({ text: expect.stringContaining(url) as string })
     })
 
-    it('names the website account and says that the images here move along', () => {
+    it('names the website account and says that the files here move along', () => {
       const code = 'Ab-_0123456789abcdefgh'
       const { text, keyboard } = linkQuestion('ada@example.com', 1, true, code)
 
       expect(text).toContain('to the website account ada@example.com?')
-      expect(text).toContain('The 1 image you have here moves to that account too.')
+      expect(text).toContain('The 1 file you have here moves to that account too.')
       expect(parseCallback(dataOf(keyboard![0]![0]!))).toEqual({ type: 'link', code })
       expect(parseCallback(dataOf(keyboard![0]![1]!))).toEqual({ type: 'cancel' })
     })
 
-    it('says that images stay with an account that can still be reached with Google', () => {
+    it('says that files stay with an account that can still be reached with Google', () => {
       const { text } = linkQuestion(null, 3, false, 'Ab-_0123456789abcdefgh')
 
-      expect(text).toContain('The 3 images you have here stay with the current account')
+      expect(text).toContain('The 3 files you have here stay with the current account')
     })
 
-    it('mentions no images when there are none', () => {
-      expect(linkQuestion(null, 0, true, 'Ab-_0123456789abcdefgh').text).not.toContain('image you have')
+    it('mentions no files when there are none', () => {
+      expect(linkQuestion(null, 0, true, 'Ab-_0123456789abcdefgh').text).not.toContain('file you have')
     })
 
-    it('counts the images that moved when the link is done', () => {
-      expect(linkedWithImagesText(1)).toContain('The 1 image you sent here before moved there as well.')
-      expect(linkedWithImagesText(4)).toContain('The 4 images you sent here before')
+    it('counts the files that moved when the link is done', () => {
+      expect(linkedWithImagesText(1)).toContain('The 1 file you sent here before moved there as well.')
+      expect(linkedWithImagesText(4)).toContain('The 4 files you sent here before')
     })
   })
 
@@ -124,7 +150,7 @@ describe('bot messages', () => {
 
       expect(text).toBe(
         [
-          'Your images: 7 · page 2 of 2\nToday: 3 of 30 images used.',
+          'Your files: 7 · page 2 of 2\nToday: 3 of 30 files used.',
           '6. photo.jpg\n2.0 MB → 512 KB, 75% smaller · 6 days left',
           '7. scan.png\nCompressing…',
         ].join('\n\n'),

@@ -21,8 +21,13 @@ RUN pnpm --filter "@onetodone/compress-api..." run build \
   && pnpm --filter @onetodone/compress-api deploy --prod --legacy /out
 
 FROM node:24-slim AS runtime
+# The worker compresses PDF files with Ghostscript.
+RUN apt-get update \
+  && apt-get install -y --no-install-recommends ghostscript \
+  && rm -rf /var/lib/apt/lists/*
 ENV NODE_ENV=production
 ENV PORT=8080
+ENV GHOSTSCRIPT_PATH=gs
 WORKDIR /app
 COPY --from=build /out ./
 USER node
