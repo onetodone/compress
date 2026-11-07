@@ -52,11 +52,16 @@ export function hasGoogle(user: User): boolean {
 /**
  * Signs in with Google. A user without Google (anonymous, or signed in through Telegram) is linked,
  * so uid, history and quota stay the same. When the Google account already belongs to another user,
- * signs in to that user instead and leaves the current session behind.
+ * signs in to that user instead; an anonymous session left that way hands its images and used quota
+ * to that user through `mergeAnonymous`, a Telegram one stays reachable through the bot and keeps them.
  *
+ * @param mergeAnonymous moves the images of the anonymous session left behind, given its ID token
  * @throws SignInError when sign-in fails for a reason other than the user closing the popup
  */
-export async function signInWithGoogle(auth: Auth): Promise<GoogleSignInOutcome> {
+export async function signInWithGoogle(
+  auth: Auth,
+  mergeAnonymous: (anonymousToken: string) => Promise<void> = async () => {},
+): Promise<GoogleSignInOutcome> {
   const user = auth.currentUser
   try {
     if (user && !hasGoogle(user)) {
@@ -69,21 +74,37 @@ export async function signInWithGoogle(auth: Auth): Promise<GoogleSignInOutcome>
     return 'switched'
   } catch (error) {
     if (error instanceof FirebaseError && error.code === 'auth/credential-already-in-use') {
-      return signInToExistingAccount(auth, error)
+      return signInToExistingAccount(auth, error, mergeAnonymous)
     }
     return failed(error)
   }
 }
 
-async function signInToExistingAccount(auth: Auth, error: FirebaseError): Promise<GoogleSignInOutcome> {
+async function signInToExistingAccount(
+  auth: Auth,
+  error: FirebaseError,
+  mergeAnonymous: (anonymousToken: string) => Promise<void>,
+): Promise<GoogleSignInOutcome> {
   const credential = GoogleAuthProvider.credentialFromError(error)
   if (!credential) return failed(error)
+  const anonymousToken = await anonymousSessionToken(auth)
   try {
     await signInWithCredential(auth, credential)
+    if (anonymousToken) await mergeAnonymous(anonymousToken)
     return 'switched'
   } catch (signInError) {
     return failed(signInError)
   }
+}
+
+/**
+ * Returns the ID token of the current session when it is anonymous, to merge it into the account
+ * signed in next; `null` for other sessions or when the token cannot be read.
+ */
+export async function anonymousSessionToken(auth: Auth): Promise<string | null> {
+  const user = auth.currentUser
+  if (!user?.isAnonymous) return null
+  return user.getIdToken().catch(() => null)
 }
 
 function failed(error: unknown): GoogleSignInOutcome {

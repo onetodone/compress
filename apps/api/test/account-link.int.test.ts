@@ -2,11 +2,13 @@ import type { NestExpressApplication } from '@nestjs/platform-express'
 import {
   createLinkCodeResponseSchema,
   listJobsResponseSchema,
+  mergeSessionResponseSchema,
   meResponseSchema,
   telegramLoginResponseSchema,
+  utcDayKey,
 } from '@onetodone/compress-shared'
 import { Auth } from 'firebase-admin/auth'
-import { Firestore } from 'firebase-admin/firestore'
+import { Firestore, Timestamp } from 'firebase-admin/firestore'
 import request from 'supertest'
 import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest'
 
@@ -15,6 +17,7 @@ import {
   CANCELLED_TEXT,
   LINK_EXPIRED_TEXT,
   LINKED_TEXT,
+  linkedWithImagesText,
   UNLINK_REFUSED_TEXT,
   UNLINKED_TEXT,
 } from '../src/bot/bot-messages.js'
@@ -88,6 +91,34 @@ describe('linking the website and Telegram', () => {
       mimeType: 'image/jpeg',
     }
     await bot.document(document)
+  }
+
+  /** Stores finished web jobs of a user and counts them on today's quota, as submits do. */
+  async function seedJobs(ownerId: string, count: number): Promise<void> {
+    for (let i = 0; i < count; i++) {
+      const ref = firestore.collection('jobs').doc()
+      await ref.set({
+        ownerId,
+        status: 'done',
+        originalName: `photo-${i}.jpg`,
+        inputType: 'image/jpeg',
+        inputKey: `originals/${ownerId}/${ref.id}`,
+        inputBytes: 2048,
+        outputKey: `results/${ownerId}/${ref.id}.jpg`,
+        outputBytes: 1024,
+        width: 64,
+        height: 48,
+        previewUrl: null,
+        error: null,
+        source: 'web',
+        createdAt: Timestamp.now(),
+        finishedAt: Timestamp.now(),
+      })
+    }
+    const used = (await userDoc(ownerId))?.jobsToday as number | undefined
+    await firestore
+      .doc(`users/${ownerId}`)
+      .set({ dayKey: utcDayKey(new Date()), jobsToday: (used ?? 0) + count }, { merge: true })
   }
 
   async function me(token: string) {
@@ -266,7 +297,7 @@ describe('linking the website and Telegram', () => {
       await http().post('/auth/telegram/link-code').set('Authorization', `Bearer ${token}`).expect(403)
     })
 
-    it('asks before moving a Telegram account that has images, and leaves them with its old user', async () => {
+    it('asks before moving a Telegram account that has images, and moves them with it', async () => {
       await sendFile()
       const oldUid = (await identityUid())!
       const { token, uid } = await signUpWithEmail()
@@ -275,7 +306,7 @@ describe('linking the website and Telegram', () => {
       await bot.start(message(), `link_${code}`)
       expect(await identityUid()).toBe(oldUid)
       const question = lastMessage()!
-      expect(question.text).toContain('The 1 image you have here stay')
+      expect(question.text).toContain('The 1 image you have here moves to that account too.')
 
       await bot.callback({
         ...message(),
@@ -284,12 +315,42 @@ describe('linking the website and Telegram', () => {
         data: encodeCallback({ type: 'link', code }),
       })
 
-      expect(lastEdit()?.text).toBe(LINKED_TEXT)
+      expect(lastEdit()?.text).toBe(linkedWithImagesText(1))
       expect(await identityUid()).toBe(uid)
-      expect(await jobIds(token)).toEqual([])
-      const oldJobs = await firestore.collection('jobs').where('ownerId', '==', oldUid).get()
-      expect(oldJobs.size).toBe(1)
+      expect(await jobIds(token)).toHaveLength(1)
+      expect((await firestore.collection('jobs').where('ownerId', '==', oldUid).get()).size).toBe(0)
+      expect(await me(token)).toMatchObject({ quota: { used: 1 } })
+      expect(await userDoc(oldUid)).toMatchObject({ jobsToday: 0 })
       expect(await userDoc(oldUid)).not.toHaveProperty('telegramId')
+    })
+
+    it('adds the used count of the Telegram account to the website user', async () => {
+      const { token, uid } = await signUpWithEmail()
+      await seedJobs(uid, 2)
+      await sendFile()
+
+      await connect(token)
+
+      expect(await jobIds(token)).toHaveLength(3)
+      expect(await me(token)).toMatchObject({ quota: { used: 3 } })
+    })
+
+    it('leaves the images with the account the Telegram account leaves when it has Google', async () => {
+      await sendFile()
+      const first = await signInWithCode(await loginCode())
+      const google = await linkWithGoogle(first.token)
+      await me(google.token)
+      const { token } = await signUpWithEmail()
+      const code = await linkCode(token)
+
+      await bot.start(message(), `link_${code}`)
+      expect(lastMessage()?.text).toContain('The 1 image you have here stays with the current account')
+      await bot.callback({ ...message(), callbackId: 'cb', data: encodeCallback({ type: 'link', code }) })
+
+      expect(lastEdit()?.text).toBe(LINKED_TEXT)
+      expect(await jobIds(token)).toEqual([])
+      expect(await jobIds(google.token)).toHaveLength(1)
+      expect(await me(google.token)).toMatchObject({ quota: { used: 1 }, telegram: { linked: false } })
     })
 
     it('leaves everything as it is when the move is cancelled', async () => {
@@ -316,6 +377,71 @@ describe('linking the website and Telegram', () => {
       expect(releasedUid).not.toBe(uid)
       expect(await userDoc(releasedUid)).toMatchObject({ jobsToday: 1, telegramId: OTHER_TELEGRAM.id })
       expect(await userDoc(uid)).toMatchObject({ telegramId: TELEGRAM.id, jobsToday: 1 })
+    })
+  })
+
+  describe('merging an anonymous session', () => {
+    const merge = (token: string, anonymousToken: string) =>
+      http().post('/me/merge').set('Authorization', `Bearer ${token}`).send({ anonymousToken })
+
+    it('moves the images and the used count of an anonymous session into the account signed in to', async () => {
+      const anonymous = await signInAnonymously()
+      await seedJobs(anonymous.uid, 2)
+      await sendFile()
+      const { token, uid } = await signInWithCode(await loginCode())
+
+      const response = await merge(token, anonymous.token).expect(200)
+
+      expect(mergeSessionResponseSchema.parse(response.body)).toEqual({ movedJobs: 2 })
+      expect(await jobIds(token)).toHaveLength(3)
+      expect(await jobIds(anonymous.token)).toEqual([])
+      expect(await me(token)).toMatchObject({ quota: { used: 3, limit: 30 } })
+      expect(await userDoc(anonymous.uid)).toMatchObject({ jobsToday: 0 })
+      const moved = await firestore.collection('jobs').where('ownerId', '==', uid).get()
+      // R2 keys stay where they are; the job keeps pointing at them.
+      expect(moved.docs.map((doc) => doc.get('inputKey') as string)).toEqual(
+        expect.arrayContaining([expect.stringContaining(`originals/${anonymous.uid}/`)]),
+      )
+    })
+
+    it('changes nothing when repeated', async () => {
+      const anonymous = await signInAnonymously()
+      await seedJobs(anonymous.uid, 1)
+      const { token } = await signUpWithEmail()
+      await merge(token, anonymous.token).expect(200)
+
+      const response = await merge(token, anonymous.token).expect(200)
+
+      expect(response.body).toEqual({ movedJobs: 0 })
+      expect(await me(token)).toMatchObject({ quota: { used: 1 } })
+    })
+
+    it('refuses a token that is not anonymous', async () => {
+      const other = await signUpWithEmail()
+      await seedJobs(other.uid, 1)
+      const { token } = await signUpWithEmail()
+
+      await merge(token, other.token).expect(400)
+      expect(await jobIds(other.token)).toHaveLength(1)
+    })
+
+    it('refuses an anonymous token whose session has linked Google since', async () => {
+      const anonymous = await signInAnonymously()
+      await seedJobs(anonymous.uid, 1)
+      await me((await linkWithGoogle(anonymous.token)).token)
+      const { token } = await signUpWithEmail()
+
+      await merge(token, anonymous.token).expect(400)
+      expect(await jobIds(token)).toEqual([])
+    })
+
+    it('refuses an invalid token and an anonymous caller', async () => {
+      const anonymous = await signInAnonymously()
+      const { token } = await signUpWithEmail()
+
+      await merge(token, 'not-a-token').expect(400)
+      await merge(token, '').expect(400)
+      await merge(anonymous.token, (await signInAnonymously()).token).expect(403)
     })
   })
 

@@ -16,7 +16,7 @@ import {
   TELEGRAM_LOGIN_FRAGMENT,
 } from '@onetodone/compress-shared'
 
-import { AccountLinkService, type LinkOutcome } from '../common/accounts/account-link.service.js'
+import { AccountLinkService, type LinkResult } from '../common/accounts/account-link.service.js'
 import { LINK_CODE_LIFETIME_MS } from '../common/accounts/link-codes.js'
 import { TelegramIdentityService, type TelegramUser } from '../common/accounts/telegram-identity.service.js'
 import type { AuthUser } from '../common/auth/auth-user.js'
@@ -37,6 +37,7 @@ import {
   imagesPage,
   LINK_EXPIRED_TEXT,
   LINKED_TEXT,
+  linkedWithImagesText,
   linkQuestion,
   LOGIN_UNAVAILABLE_TEXT,
   loginMessage,
@@ -211,9 +212,9 @@ export class BotService {
       return
     }
     if (action.type === 'link') {
-      const outcome = await this.accounts.linkTelegram(action.code, callback.from, now)
+      const result = await this.accounts.linkTelegram(action.code, callback.from, now)
       await this.chat.answerCallback(callbackId)
-      await this.edit(chatId, messageId, { text: linkOutcomeText(outcome) })
+      await this.edit(chatId, messageId, { text: linkOutcomeText(result) })
       return
     }
 
@@ -289,7 +290,8 @@ export class BotService {
     }
     // Always asked, so a link someone else sent cannot connect this account to theirs unnoticed.
     const images = current ? (await this.jobs.page({ uid: current, kind: 'registered' }, 0, 1)).total : 0
-    const { text, keyboard } = linkQuestion(target.label, images, code)
+    const imagesMove = images > 0 && !(await this.accounts.links(current!)).googleLinked
+    const { text, keyboard } = linkQuestion(target.label, images, imagesMove, code)
     await this.chat.sendMessage(message.chatId, text, { keyboard })
   }
 
@@ -343,8 +345,8 @@ export class BotService {
 
 const LINK_PREFIX = 'link_'
 
-function linkOutcomeText(outcome: LinkOutcome): string {
-  if (outcome === 'linked') return LINKED_TEXT
+function linkOutcomeText({ outcome, movedJobs }: LinkResult): string {
+  if (outcome === 'linked') return movedJobs > 0 ? linkedWithImagesText(movedJobs) : LINKED_TEXT
   if (outcome === 'already_linked') return ALREADY_LINKED_TEXT
   return LINK_EXPIRED_TEXT
 }

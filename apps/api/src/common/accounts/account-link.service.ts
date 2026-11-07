@@ -10,7 +10,7 @@ import {
   type Transaction,
 } from 'firebase-admin/firestore'
 
-import type { AuthUser } from '../auth/auth-user.js'
+import { accountKindOf, type AuthUser } from '../auth/auth-user.js'
 import { CallTimer } from '../logging/call-timer.js'
 import { readStoredUsage } from '../quota/quota.js'
 import { type AccountLinks, readAccountLinks, USERS } from './account-fields.js'
@@ -23,6 +23,7 @@ import {
   newLinkCode,
   readLinkCode,
 } from './link-codes.js'
+import { LibraryMergeService } from './library-merge.service.js'
 import { IDENTITIES, telegramIdentity, type TelegramUser } from './telegram-identity.service.js'
 
 /** A fresh one-time code and when it stops working. */
@@ -34,9 +35,19 @@ export interface IssuedCode {
 /** How linking a Telegram account with a code ended. */
 export type LinkOutcome = 'linked' | 'already_linked' | 'invalid'
 
+/** How linking a Telegram account with a code ended, and how many of its images moved along. */
+export interface LinkResult {
+  outcome: LinkOutcome
+  /** Jobs that moved from the uid the Telegram account left to the website account. */
+  movedJobs: number
+}
+
 /** Message of a login code that cannot be used; the same for unknown, used and expired codes. */
 export const LOGIN_CODE_REFUSED =
   'This sign-in link has expired or was already used. Send /login to the bot for a new one.'
+
+/** Message of an anonymous session that cannot be merged into the user. */
+export const MERGE_REFUSED = 'The images of this session cannot be moved to your account'
 
 /**
  * Links Telegram accounts and website users through one-time codes, and unlinks them.
@@ -54,6 +65,7 @@ export class AccountLinkService {
     private readonly firestore: Firestore,
     private readonly auth: Auth,
     private readonly timer: CallTimer,
+    private readonly library: LibraryMergeService,
   ) {}
 
   /** Returns what `users/{uid}` records about the ways into an account. */
@@ -113,17 +125,18 @@ export class AccountLinkService {
   }
 
   /**
-   * Uses a `link` code: the Telegram account moves to the code's user. The uid it leaves keeps its
-   * jobs; a Telegram account the user had linked before is released.
+   * Uses a `link` code: the Telegram account moves to the code's user. When nothing else leads to the
+   * uid it leaves (no Google sign-in), that uid's images and today's used quota move along; a uid with
+   * Google keeps them. A Telegram account the user had linked before is released.
    */
-  async linkTelegram(code: string, telegram: TelegramUser, now = new Date()): Promise<LinkOutcome> {
-    if (!isLinkCode(code)) return 'invalid'
+  async linkTelegram(code: string, telegram: TelegramUser, now = new Date()): Promise<LinkResult> {
+    if (!isLinkCode(code)) return { outcome: 'invalid', movedJobs: 0 }
     const codeRef = this.firestore.collection(LINK_CODES).doc(linkCodeId(code))
     const identityRef = telegramIdentity(this.firestore, telegram.id)
     const telegramUsername = telegram.username ?? null
 
-    const { outcome, uid } = await this.timer.measure('firestore', 'accounts.linkTelegram', () =>
-      this.firestore.runTransaction(async (tx): Promise<{ outcome: LinkOutcome; uid?: string }> => {
+    const { outcome, uid, orphaned } = await this.timer.measure('firestore', 'accounts.linkTelegram', () =>
+      this.firestore.runTransaction(async (tx): Promise<{ outcome: LinkOutcome; uid?: string; orphaned?: string }> => {
         const [codeSnapshot, identity] = await tx.getAll(codeRef, identityRef)
         const stored = readLinkCode(codeSnapshot!.data(), 'link', now)
         if (!stored) return { outcome: 'invalid' }
@@ -150,11 +163,46 @@ export class AccountLinkService {
           const { telegramUsername: replacedUsername } = readAccountLinks(target.data())
           this.release(tx, replacedRef!, replacedId!, replacedUsername, target)
         }
-        return { outcome: 'linked', uid: stored.uid }
+        const reachable = previous?.exists === true && readAccountLinks(previous.data()).googleLinked
+        return { outcome: 'linked', uid: stored.uid, orphaned: previousRef && !reachable ? previousUid : undefined }
       }),
     )
-    if (outcome === 'linked') this.logger.log({ userId: uid }, 'Linked a Telegram account')
-    return outcome
+    if (outcome !== 'linked') return { outcome, movedJobs: 0 }
+    this.logger.log({ userId: uid }, 'Linked a Telegram account')
+    return { outcome, movedJobs: orphaned ? await this.library.merge(orphaned, uid!, now) : 0 }
+  }
+
+  /**
+   * Moves the images and today's used quota of an anonymous session the user leaves, e.g. by signing
+   * in to an account that already existed, into the user. Holding the session's ID token proves that
+   * the caller owns it.
+   *
+   * @throws ForbiddenException when the user is anonymous
+   * @throws BadRequestException when the token is invalid, not anonymous, the user's own, or its uid has
+   *   another way in since (Google or Telegram)
+   * @returns the number of jobs moved
+   */
+  async mergeAnonymousSession(user: AuthUser, anonymousToken: string): Promise<number> {
+    if (user.kind !== 'registered') throw new ForbiddenException('Sign in to keep the images of another session')
+    const fromUid = await this.anonymousUid(anonymousToken)
+    if (fromUid === user.uid) throw new BadRequestException(MERGE_REFUSED)
+    // A token stays valid for an hour after its session linked Google; that uid is reachable and stays.
+    const links = await this.links(fromUid)
+    if (links.googleLinked || links.telegramId !== null) throw new BadRequestException(MERGE_REFUSED)
+    return this.library.merge(fromUid, user.uid)
+  }
+
+  private async anonymousUid(token: string): Promise<string> {
+    let decoded
+    try {
+      decoded = await this.timer.measure('auth', 'verifyIdToken', () => this.auth.verifyIdToken(token))
+    } catch (error) {
+      // Failing to fetch Google's public keys is a server problem, not a bad token.
+      if ((error as { code?: unknown }).code === 'auth/internal-error') throw error
+      throw new BadRequestException(MERGE_REFUSED)
+    }
+    if (accountKindOf(decoded.firebase.sign_in_provider) !== 'anonymous') throw new BadRequestException(MERGE_REFUSED)
+    return decoded.uid
   }
 
   /**
