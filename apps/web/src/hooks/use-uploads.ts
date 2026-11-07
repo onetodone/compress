@@ -1,6 +1,6 @@
 'use client'
 
-import type { CompressionPreset, QuotaErrorCode } from '@onetodone/compress-shared'
+import type { CompressionPreset, InputLimits, QuotaErrorCode } from '@onetodone/compress-shared'
 import { useCallback, useState } from 'react'
 
 import { api } from '@/lib/api'
@@ -33,9 +33,9 @@ export interface Uploads {
   /**
    * Starts uploads of picked files, compressed with `preset`.
    * @param remaining jobs the user may still submit today, if known; files beyond it are marked as limited
-   * @param maxInputBytes largest file the user may upload; larger files are rejected
+   * @param limits file types the user may upload and their size limits; other files are rejected
    */
-  addFiles: (files: Iterable<File>, preset: CompressionPreset, remaining: number | null, maxInputBytes: number) => void
+  addFiles: (files: Iterable<File>, preset: CompressionPreset, remaining: number | null, limits: InputLimits) => void
   /** Drops uploads from the list. */
   removeUploads: (keys: ReadonlySet<string>) => void
 }
@@ -62,7 +62,7 @@ export function useUploads(): Uploads {
   )
 
   const addFiles = useCallback(
-    (files: Iterable<File>, preset: CompressionPreset, remaining: number | null, maxInputBytes: number) => {
+    (files: Iterable<File>, preset: CompressionPreset, remaining: number | null, limits: InputLimits) => {
       // Files already on their way are not counted in the quota yet.
       let allowance = remaining === null ? Infinity : remaining - queue.pending
       const added: Upload[] = []
@@ -70,7 +70,7 @@ export function useUploads(): Uploads {
       for (const file of files) {
         const key = crypto.randomUUID()
         const base = { key, name: file.name, size: file.size, progress: 0, jobId: null, error: null, limit: null }
-        const checked = checkFile(file, maxInputBytes, preset)
+        const checked = checkFile(file, limits, preset)
         if (!checked.ok) {
           added.push({ ...base, stage: 'rejected', error: checked.reason })
         } else if (allowance <= 0) {

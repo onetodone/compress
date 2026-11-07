@@ -35,7 +35,7 @@ export function AccountControl({ user, signInWithGoogle, signOut }: AccountContr
     <div className="flex flex-col items-end gap-1 text-sm">
       {user.kind === 'anonymous' ? (
         <div className="flex flex-wrap items-center justify-end gap-2">
-          <span className="text-zinc-600 dark:text-zinc-400">Sign in for more images a day</span>
+          <span className="text-zinc-600 dark:text-zinc-400">Sign in for more files a day</span>
           <button
             type="button"
             disabled={busy}

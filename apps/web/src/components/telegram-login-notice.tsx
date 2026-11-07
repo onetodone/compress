@@ -41,7 +41,7 @@ export function TelegramLoginNotice({ state, currentName, onConfirm, onDismiss }
     <div className="flex flex-wrap items-center justify-between gap-3 rounded-lg bg-zinc-100 px-4 py-3 text-sm dark:bg-zinc-900">
       {state.leaving === 'images' ? (
         <span>
-          Sign in with your Telegram account? The images of this session move to it. Continue only with a link from your
+          Sign in with your Telegram account? The files of this session move to it. Continue only with a link from your
           own Telegram.
         </span>
       ) : (

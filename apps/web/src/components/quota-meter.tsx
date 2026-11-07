@@ -7,11 +7,11 @@ export function QuotaMeter({ quota, exhausted = false }: { quota: Quota; exhaust
   return (
     <div className="flex min-w-40 flex-col gap-1.5 text-right" aria-live="polite">
       <span className="text-sm">
-        <span className="font-medium tabular-nums">{left}</span> of {quota.limit} images left today
+        <span className="font-medium tabular-nums">{left}</span> of {quota.limit} files left today
       </span>
       <div
         role="meter"
-        aria-label="Images used today"
+        aria-label="Files used today"
         aria-valuemin={0}
         aria-valuemax={quota.limit}
         aria-valuenow={quota.limit - left}

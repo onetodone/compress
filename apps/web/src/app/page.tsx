@@ -5,7 +5,7 @@ import {
   isTerminalJobStatus,
   type JobSummary,
   DEFAULT_COMPRESSION_PRESET,
-  imageFormats,
+  fileFormats,
 } from '@onetodone/compress-shared'
 import { useMemo, useState } from 'react'
 
@@ -40,7 +40,7 @@ export default function HomePage() {
         <div>
           <h1 className="text-2xl font-semibold tracking-tight sm:text-3xl">Compress OneToDone</h1>
           <p className="mt-1 text-sm text-zinc-600 dark:text-zinc-400">
-            Smaller {imageFormats.names('and')} files, same look.
+            Smaller {fileFormats.names('and')} files, same look.
           </p>
         </div>
         {user && <AccountControl user={user} signInWithGoogle={signInWithGoogle} signOut={signOut} />}
@@ -66,7 +66,7 @@ export default function HomePage() {
         // A different user gets a fresh workspace: no uploads, history or quota of the previous one.
         <Workspace key={user.uid} user={user} />
       ) : (
-        <DropZone disabled hint="Starting a session…" maxInputBytes={null} onFiles={() => undefined} />
+        <DropZone disabled hint="Starting a session…" limits={null} onFiles={() => undefined} />
       )}
     </main>
   )
@@ -161,14 +161,14 @@ function Workspace({ user }: { user: SessionUser }) {
         <DropZone
           disabled={limits === null || limitHint !== null}
           hint={dropHint}
-          maxInputBytes={limits?.maxInputBytes ?? null}
-          onFiles={(files) => limits && addFiles(files, preset, remaining, limits.maxInputBytes)}
+          limits={limits}
+          onFiles={(files) => limits && addFiles(files, preset, remaining, limits)}
         />
       </section>
 
-      <section aria-labelledby="images-heading" className="flex flex-col gap-3">
-        <h2 id="images-heading" className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
-          Your images
+      <section aria-labelledby="files-heading" className="flex flex-col gap-3">
+        <h2 id="files-heading" className="text-sm font-medium text-zinc-500 dark:text-zinc-400">
+          Your files
         </h2>
         <ListToolbar totals={uploadTotals(uploads, live.jobs)} downloadable={downloadable} />
         {items.map((item) => (
@@ -182,7 +182,7 @@ function Workspace({ user }: { user: SessionUser }) {
           />
         ))}
         {history.status === 'idle' && items.length === 0 && (
-          <p className="text-sm text-zinc-500 dark:text-zinc-400">Images you compress show up here.</p>
+          <p className="text-sm text-zinc-500 dark:text-zinc-400">Files you compress show up here.</p>
         )}
         {history.error && (
           <p role="alert" className="text-sm text-red-600 dark:text-red-400">

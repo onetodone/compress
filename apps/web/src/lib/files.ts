@@ -4,9 +4,10 @@ import {
   createJobRequestSchema,
   DEFAULT_COMPRESSION_PRESET,
   downloadFileName,
-  imageFormats,
-  type ImageType,
+  fileFormats,
+  type FileType,
   formatBytes,
+  type InputLimits,
   type JobSummary,
 } from '@onetodone/compress-shared'
 
@@ -14,34 +15,37 @@ import {
 export type CheckedFile = { ok: true; request: CreateJobRequest } | { ok: false; reason: string }
 
 /**
- * Returns the image type of a picked file. Browsers report an empty type for extensions the operating
+ * Returns the file type of a picked file. Browsers report an empty type for extensions the operating
  * system does not know (e.g. `.avif` on some systems), so the extension decides then.
  * @param file file metadata as the browser reports it
  */
-export function imageTypeOf(file: Pick<File, 'name' | 'type'>): ImageType | undefined {
+export function fileTypeOf(file: Pick<File, 'name' | 'type'>): FileType | undefined {
   if (file.type !== '') {
-    const declared = imageFormats.schema.safeParse(file.type)
+    const declared = fileFormats.schema.safeParse(file.type)
     return declared.success ? declared.data : undefined
   }
-  const dot = file.name.lastIndexOf('.')
-  return dot > 0 ? imageFormats.typeOfExtension(file.name.slice(dot + 1)) : undefined
+  return fileFormats.typeOfFileName(file.name)
 }
 
 /**
  * Checks a picked file against the limits of `POST /jobs` before anything is uploaded.
  * @param file file metadata as the browser reports it
- * @param maxInputBytes largest file the user may upload, from `GET /me`
+ * @param limits file types the user may upload and their size limits, from `GET /me`
  * @param preset compression preset the job is created with
  */
 export function checkFile(
   file: Pick<File, 'name' | 'type' | 'size'>,
-  maxInputBytes: number,
+  limits: InputLimits,
   preset: CompressionPreset = DEFAULT_COMPRESSION_PRESET,
 ): CheckedFile {
-  const contentType = imageTypeOf(file)
-  if (!contentType) return { ok: false, reason: `Only ${imageFormats.names('and')}` }
+  const contentType = fileTypeOf(file)
+  const maxBytes = contentType && limits[contentType]
+  if (!contentType || maxBytes === undefined) {
+    const accepted = fileFormats.types.filter((type) => limits[type] !== undefined)
+    return { ok: false, reason: `Only ${fileFormats.names('and', accepted)}` }
+  }
   if (file.size === 0) return { ok: false, reason: 'The file is empty' }
-  if (file.size > maxInputBytes) return { ok: false, reason: `Larger than ${formatBytes(maxInputBytes)}` }
+  if (file.size > maxBytes) return { ok: false, reason: `Larger than ${formatBytes(maxBytes)}` }
   const result = createJobRequestSchema.safeParse({
     originalName: file.name,
     contentType,
@@ -67,6 +71,6 @@ export function savedPercent(inputBytes: number, outputBytes: number): number {
  * @param job finished job
  */
 export function resultFileName(job: Pick<JobSummary, 'originalName' | 'inputType' | 'outputType'>): string {
-  const type = imageFormats.schema.safeParse(job.outputType ?? job.inputType)
+  const type = fileFormats.schema.safeParse(job.outputType ?? job.inputType)
   return type.success ? downloadFileName(job.originalName, type.data) : job.originalName
 }

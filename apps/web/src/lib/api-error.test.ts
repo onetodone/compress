@@ -12,7 +12,7 @@ describe('apiErrorMessage', () => {
   it('suggests signing in when the network limit is reached', () => {
     expect(
       apiErrorMessage(429, { message: 'Daily job limit of this network reached', code: 'network_daily_limit' }),
-    ).toBe('Too many images from your network today. Sign in to continue.')
+    ).toBe('Too many files from your network today. Sign in to continue.')
     expect(apiErrorMessage(429, { code: 'daily_limit' })).toBe('Daily limit reached. Try again tomorrow.')
   })
 
@@ -49,7 +49,7 @@ describe('quotaLimitMessage', () => {
     )
     expect(quotaLimitMessage('daily_limit', 'registered')).toBe('Daily limit reached. Try again tomorrow.')
     expect(quotaLimitMessage('network_daily_limit', 'anonymous')).toBe(
-      'Too many images from your network today. Sign in to continue.',
+      'Too many files from your network today. Sign in to continue.',
     )
   })
 })

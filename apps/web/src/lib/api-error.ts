@@ -6,7 +6,7 @@ import { type AccountKind, type QuotaErrorCode, quotaErrorCodeSchema } from '@on
  * @param kind account kind of the user; signing in raises the limit of an anonymous one
  */
 export function quotaLimitMessage(code: QuotaErrorCode, kind: AccountKind): string {
-  if (code === 'network_daily_limit') return 'Too many images from your network today. Sign in to continue.'
+  if (code === 'network_daily_limit') return 'Too many files from your network today. Sign in to continue.'
   return kind === 'anonymous'
     ? 'Daily limit reached. Sign in for more, or try again tomorrow.'
     : 'Daily limit reached. Try again tomorrow.'

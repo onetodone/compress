@@ -1,6 +1,13 @@
 'use client'
 
-import { jobsUsedToday, type MeResponse, type Quota, type UserLimits, utcDayKey } from '@onetodone/compress-shared'
+import {
+  type InputLimits,
+  inputLimitsOf,
+  jobsUsedToday,
+  type MeResponse,
+  type Quota,
+  utcDayKey,
+} from '@onetodone/compress-shared'
 import { doc, onSnapshot } from 'firebase/firestore'
 import { useEffect, useRef, useState } from 'react'
 
@@ -13,15 +20,15 @@ const RETRY_MS = 5_000
 export interface QuotaState {
   /** `null` until both the used count and the limit have arrived. */
   quota: Quota | null
-  /** Per-file limits; `null` until `GET /me` has answered once. */
-  limits: UserLimits | null
+  /** File types the user may upload and their size limits; `null` until `GET /me` has answered once. */
+  limits: InputLimits | null
   /** `GET /me` failed before any limits arrived; it is retried. */
   limitsFailed: boolean
   /** The client's network has used up its anonymous jobs for today. */
   networkLimitReached: boolean
 }
 
-type MeState = Pick<MeResponse, 'limits' | 'networkLimitReached'> & { dailyJobs: number }
+type MeState = Pick<MeResponse, 'networkLimitReached'> & { dailyJobs: number; limits: InputLimits }
 
 /**
  * Returns the user's quota and limits. The used count is updated live from `users/{uid}`, so submits
@@ -58,7 +65,7 @@ export function useQuota(uid: string, kind: MeResponse['kind']): QuotaState {
         known.current = true
         setMe({
           dailyJobs: response.quota.limit,
-          limits: response.limits,
+          limits: inputLimitsOf(response.limits),
           networkLimitReached: response.networkLimitReached,
         })
         setFailed(false)

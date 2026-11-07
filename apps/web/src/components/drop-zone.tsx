@@ -1,18 +1,18 @@
 'use client'
 
-import { formatBytes, imageFormats } from '@onetodone/compress-shared'
+import { describeInputLimits, fileFormats, type InputLimits } from '@onetodone/compress-shared'
 import { type DragEvent, useState } from 'react'
 
 interface DropZoneProps {
   disabled: boolean
   /** Shown instead of the instructions, e.g. why the zone is disabled. */
   hint: string | null
-  /** Largest file the user may upload; shown with the instructions when known. */
-  maxInputBytes: number | null
+  /** File types the user may upload and their size limits; shown with the instructions when known. */
+  limits: InputLimits | null
   onFiles: (files: File[]) => void
 }
 
-export function DropZone({ disabled, hint, maxInputBytes, onFiles }: DropZoneProps) {
+export function DropZone({ disabled, hint, limits, onFiles }: DropZoneProps) {
   const [dragging, setDragging] = useState(false)
 
   const onDragOver = (event: DragEvent) => {
@@ -41,7 +41,7 @@ export function DropZone({ disabled, hint, maxInputBytes, onFiles }: DropZonePro
     >
       <input
         type="file"
-        accept={imageFormats.accept}
+        accept={fileFormats.accept(limits ? fileFormats.types.filter((type) => limits[type] !== undefined) : undefined)}
         multiple
         disabled={disabled}
         className="sr-only"
@@ -62,10 +62,9 @@ export function DropZone({ disabled, hint, maxInputBytes, onFiles }: DropZonePro
         <span className="text-sm">{hint}</span>
       ) : (
         <>
-          <span className="font-medium">Drop images here or click to choose</span>
+          <span className="font-medium">Drop files here or click to choose</span>
           <span className="text-sm text-zinc-500 dark:text-zinc-400">
-            {imageFormats.names('or')}
-            {maxInputBytes !== null && `, up to ${formatBytes(maxInputBytes)} each`}
+            {limits ? describeInputLimits(limits) : fileFormats.names('or')}
           </span>
         </>
       )}
