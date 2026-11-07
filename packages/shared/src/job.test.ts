@@ -8,11 +8,11 @@ import {
   jobStatusSchema,
   listJobsQuerySchema,
   listJobsResponseSchema,
-  MAX_INPUT_BYTES,
   readJobSettings,
   submitJobResponseSchema,
   toJobSummary,
 } from './job.js'
+import { MAX_INPUT_BYTES } from './format.js'
 
 describe('jobStatusSchema', () => {
   it('accepts every known status', () => {
@@ -36,14 +36,15 @@ describe('isTerminalJobStatus', () => {
 })
 
 describe('inputTypeSchema', () => {
-  it('accepts JPEG, PNG, WebP and AVIF', () => {
-    for (const type of ['image/jpeg', 'image/png', 'image/webp', 'image/avif']) {
+  it('accepts JPEG, PNG, WebP, AVIF and PDF', () => {
+    for (const type of ['image/jpeg', 'image/png', 'image/webp', 'image/avif', 'application/pdf']) {
       expect(inputTypeSchema.parse(type)).toBe(type)
     }
   })
 
-  it('rejects other image types', () => {
+  it('rejects other types', () => {
     expect(inputTypeSchema.safeParse('image/gif').success).toBe(false)
+    expect(inputTypeSchema.safeParse('application/zip').success).toBe(false)
     expect(inputTypeSchema.safeParse('image/heic').success).toBe(false)
   })
 })
@@ -64,10 +65,10 @@ describe('readJobSettings', () => {
 describe('createJobRequestSchema', () => {
   const valid = { originalName: 'photo.jpg', contentType: 'image/jpeg', size: 1024 }
 
-  it('accepts a supported image within the size limit with the default settings', () => {
+  it('accepts a supported file within the size limit with the default settings', () => {
     expect(createJobRequestSchema.parse(valid)).toEqual({ ...valid, settings: { preset: 'balanced' } })
     expect(createJobRequestSchema.parse({ ...valid, contentType: 'image/avif' }).contentType).toBe('image/avif')
-    expect(createJobRequestSchema.parse({ ...valid, contentType: 'image/png', size: MAX_INPUT_BYTES }).size).toBe(
+    expect(createJobRequestSchema.parse({ ...valid, contentType: 'application/pdf', size: MAX_INPUT_BYTES }).size).toBe(
       MAX_INPUT_BYTES,
     )
   })
@@ -76,7 +77,7 @@ describe('createJobRequestSchema', () => {
     expect(createJobRequestSchema.parse({ ...valid, originalName: '  photo.jpg ' }).originalName).toBe('photo.jpg')
   })
 
-  it('rejects files over 10 MB and empty files', () => {
+  it('rejects files over 20 MB and empty files', () => {
     expect(createJobRequestSchema.safeParse({ ...valid, size: MAX_INPUT_BYTES + 1 }).success).toBe(false)
     expect(createJobRequestSchema.safeParse({ ...valid, size: 0 }).success).toBe(false)
   })
