@@ -1,11 +1,17 @@
-import { Controller, Get, Inject, Ip } from '@nestjs/common'
-import type { MeResponse } from '@onetodone/compress-shared'
+import { Body, Controller, Get, HttpCode, HttpStatus, Inject, Ip, Post } from '@nestjs/common'
+import {
+  type MergeSessionRequest,
+  mergeSessionRequestSchema,
+  type MergeSessionResponse,
+  type MeResponse,
+} from '@onetodone/compress-shared'
 
 import { AccountLinkService } from '../../common/accounts/account-link.service.js'
 import type { AuthUser } from '../../common/auth/auth-user.js'
 import type { ApiConfig } from '../../common/config/config.js'
 import { CONFIG } from '../../common/config/config.module.js'
 import { QuotaService } from '../../common/quota/quota.service.js'
+import { ZodValidationPipe } from '../../common/validation/zod-validation.pipe.js'
 import { CurrentUser, GoogleLinked } from '../auth/current-user.decorator.js'
 
 @Controller('me')
@@ -36,5 +42,14 @@ export class MeController {
       networkLimitReached,
       telegram: this.config.TELEGRAM_BOT_USERNAME ? telegram : null,
     }
+  }
+
+  @Post('merge')
+  @HttpCode(HttpStatus.OK)
+  async merge(
+    @CurrentUser() user: AuthUser,
+    @Body(new ZodValidationPipe(mergeSessionRequestSchema)) body: MergeSessionRequest,
+  ): Promise<MergeSessionResponse> {
+    return { movedJobs: await this.accounts.mergeAnonymousSession(user, body.anonymousToken) }
   }
 }

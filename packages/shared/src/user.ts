@@ -49,3 +49,21 @@ export const meResponseSchema = z.object({
 
 /** Response of `GET /me`: the signed-in user and their quota for today. */
 export type MeResponse = z.infer<typeof meResponseSchema>
+
+/** Validates the body of `POST /me/merge`. */
+export const mergeSessionRequestSchema = z.object({
+  /** Firebase ID token of the anonymous session the user leaves. */
+  anonymousToken: z.string().min(1).max(8192),
+})
+
+/** Body of `POST /me/merge`: the anonymous session whose images and used quota move to the user. */
+export type MergeSessionRequest = z.infer<typeof mergeSessionRequestSchema>
+
+/** Validates the response of `POST /me/merge`. */
+export const mergeSessionResponseSchema = z.object({
+  /** Jobs that moved to the user. */
+  movedJobs: z.number().int().nonnegative(),
+})
+
+/** Response of `POST /me/merge`. */
+export type MergeSessionResponse = z.infer<typeof mergeSessionResponseSchema>

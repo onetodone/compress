@@ -6,6 +6,7 @@ import {
   failureText,
   helpText,
   imagesPage,
+  linkedWithImagesText,
   linkQuestion,
   loginMessage,
   quotaText,
@@ -89,14 +90,29 @@ describe('bot messages', () => {
       expect(loginMessage(url, 10)).toEqual({ text: expect.stringContaining(url) as string })
     })
 
-    it('names the website account and mentions images left behind', () => {
+    it('names the website account and says that the images here move along', () => {
       const code = 'Ab-_0123456789abcdefgh'
-      const { text, keyboard } = linkQuestion('ada@example.com', 1, code)
+      const { text, keyboard } = linkQuestion('ada@example.com', 1, true, code)
 
       expect(text).toContain('to the website account ada@example.com?')
-      expect(text).toContain('The 1 image you have here stay')
+      expect(text).toContain('The 1 image you have here moves to that account too.')
       expect(parseCallback(dataOf(keyboard![0]![0]!))).toEqual({ type: 'link', code })
       expect(parseCallback(dataOf(keyboard![0]![1]!))).toEqual({ type: 'cancel' })
+    })
+
+    it('says that images stay with an account that can still be reached with Google', () => {
+      const { text } = linkQuestion(null, 3, false, 'Ab-_0123456789abcdefgh')
+
+      expect(text).toContain('The 3 images you have here stay with the current account')
+    })
+
+    it('mentions no images when there are none', () => {
+      expect(linkQuestion(null, 0, true, 'Ab-_0123456789abcdefgh').text).not.toContain('image you have')
+    })
+
+    it('counts the images that moved when the link is done', () => {
+      expect(linkedWithImagesText(1)).toContain('The 1 image you sent here before moved there as well.')
+      expect(linkedWithImagesText(4)).toContain('The 4 images you sent here before')
     })
   })
 

@@ -227,6 +227,15 @@ export const LINK_EXPIRED_TEXT =
 export const LINKED_TEXT =
   'Done: this Telegram account is connected to your website account. Images you send here appear on the website too, and the daily limit is shared.'
 
+/**
+ * Reply when this Telegram account was connected to a website account and its earlier images moved there.
+ * @param movedJobs images that moved
+ */
+export function linkedWithImagesText(movedJobs: number): string {
+  const images = movedJobs === 1 ? '1 image' : `${movedJobs} images`
+  return `${LINKED_TEXT} The ${images} you sent here before moved there as well.`
+}
+
 /** Reply when this Telegram account was already connected to that website account. */
 export const ALREADY_LINKED_TEXT = 'This Telegram account is already connected to that website account.'
 
@@ -234,8 +243,9 @@ export const ALREADY_LINKED_TEXT = 'This Telegram account is already connected t
  * Question before this Telegram account is connected to a website account.
  * @param label how to name the website account, e.g. its email
  * @param images jobs of the account the Telegram account leaves
+ * @param imagesMove whether those jobs move along; they stay with an account that has Google
  */
-export function linkQuestion(label: string | null, images: number, code: string): BotMessage {
+export function linkQuestion(label: string | null, images: number, imagesMove: boolean, code: string): BotMessage {
   const count = `${images} ${images === 1 ? 'image' : 'images'}`
   const lines = [
     label
@@ -246,7 +256,9 @@ export function linkQuestion(label: string | null, images: number, code: string)
   if (images > 0) {
     lines.push(
       '',
-      `The ${count} you have here stay with the current account and are no longer listed after connecting.`,
+      imagesMove
+        ? `The ${count} you have here ${images === 1 ? 'moves' : 'move'} to that account too.`
+        : `The ${count} you have here ${images === 1 ? 'stays' : 'stay'} with the current account, which you can still reach with Google on the website.`,
     )
   }
   return {
