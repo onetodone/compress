@@ -6,7 +6,7 @@ import { checkFile, resultFileName, savedPercent } from './files'
 const MB = 1024 * 1024
 const LIMIT = 10 * MB
 const IMAGES: InputLimits = { 'image/jpeg': LIMIT, 'image/png': LIMIT, 'image/webp': LIMIT, 'image/avif': LIMIT }
-const LIMITS: InputLimits = { ...IMAGES, 'application/pdf': 20 * MB }
+const LIMITS: InputLimits = { ...IMAGES, 'image/heic': LIMIT, 'application/pdf': 20 * MB }
 
 describe('checkFile', () => {
   it('accepts a supported file within the size limit', () => {
@@ -33,10 +33,21 @@ describe('checkFile', () => {
     expect(checkFile({ name: 'notes.txt', type: '', size: 10 }, LIMITS).ok).toBe(false)
   })
 
+  it('takes HEIF files for HEIC files', () => {
+    const checked = checkFile({ name: 'IMG_1099.HEIF', type: 'image/heif', size: 10 }, LIMITS)
+
+    expect(checked.ok && checked.request.contentType).toBe('image/heic')
+    expect(checkFile({ name: 'IMG_1099.heic', type: '', size: 10 }, LIMITS).ok).toBe(true)
+  })
+
+  it('rejects HEIC files when the user may not upload them', () => {
+    expect(checkFile({ name: 'IMG_1099.heic', type: 'image/heic', size: 10 }, IMAGES).ok).toBe(false)
+  })
+
   it('rejects other types, empty files and files over the limit', () => {
     expect(checkFile({ name: 'a.gif', type: 'image/gif', size: 10 }, LIMITS)).toEqual({
       ok: false,
-      reason: 'Only JPEG, PNG, WebP, AVIF and PDF',
+      reason: 'Only JPEG, PNG, WebP, AVIF, HEIC and PDF',
     })
     expect(checkFile({ name: 'a.png', type: 'image/gif', size: 10 }, LIMITS).ok).toBe(false)
     expect(checkFile({ name: 'a.png', type: 'image/png', size: 0 }, LIMITS)).toEqual({
@@ -100,8 +111,8 @@ describe('resultFileName', () => {
   })
 
   it('keeps the original name for a type this version does not know', () => {
-    expect(resultFileName({ originalName: 'photo.heic', inputType: 'image/heic', outputType: 'image/heic' })).toBe(
-      'photo.heic',
+    expect(resultFileName({ originalName: 'photo.jxl', inputType: 'image/jxl', outputType: 'image/jxl' })).toBe(
+      'photo.jxl',
     )
   })
 })

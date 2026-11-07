@@ -2,6 +2,7 @@
 
 import {
   type AccountKind,
+  type FileType,
   fileFormats,
   formatBytes,
   type JobSummary,
@@ -197,27 +198,34 @@ function JobActions({ jobId, canDownload, onDeleted }: { jobId: string; canDownl
   )
 }
 
-/** The document format of a job or a picked file, or `null` for images and unknown types. */
-function documentFormatOf(job: JobSummary | null, name: string): string | null {
+/** Image formats that browsers other than Safari cannot display. */
+const UNDISPLAYABLE_IMAGES: ReadonlySet<FileType> = new Set(['image/heic'])
+
+/**
+ * The format named on the icon shown instead of a picture: for documents, and for images browsers
+ * cannot display unless the CDN made a preview. `null` for other images and unknown types.
+ */
+function iconFormatOf(job: JobSummary | null, name: string): string | null {
   const type = fileFormats.schema.safeParse(job?.outputType ?? job?.inputType ?? fileFormats.typeOfFileName(name))
   if (!type.success) return null
   const info = fileFormats.info(type.data)
-  return info.kind === 'document' ? info.name : null
+  if (info.kind === 'document') return info.name
+  return UNDISPLAYABLE_IMAGES.has(type.data) && !job?.previewUrl ? info.name : null
 }
 
 /**
  * Small picture of a job: for a finished image the CDN preview, or the result itself when there is
- * no preview; for a document an icon with its format.
+ * no preview; for a document, or an image browsers cannot display, an icon with its format.
  */
 function Thumbnail({ job, name }: { job: JobSummary | null; name: string }) {
-  const documentFormat = documentFormatOf(job, name)
-  const done = job?.status === 'done' && documentFormat === null
+  const iconFormat = iconFormatOf(job, name)
+  const done = job?.status === 'done' && iconFormat === null
   const resultUrl = useResultUrl(done && !job.previewUrl ? job.id : null)
   const src = done ? (job.previewUrl ?? resultUrl) : null
   return (
     <div className="relative flex h-14 w-14 shrink-0 items-center justify-center overflow-hidden rounded-md bg-zinc-100 text-zinc-500 dark:bg-zinc-800 dark:text-zinc-400">
       {src && <Image src={src} alt="" fill sizes="56px" className="object-cover" />}
-      {documentFormat && (
+      {iconFormat && (
         <>
           <svg
             aria-hidden
@@ -231,7 +239,7 @@ function Thumbnail({ job, name }: { job: JobSummary | null; name: string }) {
             <path d="M6 3h8l4 4v14H6z" />
             <path d="M14 3v4h4" />
           </svg>
-          <span className="absolute bottom-2.5 text-[9px] font-semibold tracking-wide">{documentFormat}</span>
+          <span className="absolute bottom-2.5 text-[9px] font-semibold tracking-wide">{iconFormat}</span>
         </>
       )}
     </div>
